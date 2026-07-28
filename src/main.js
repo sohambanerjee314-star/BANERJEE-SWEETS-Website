@@ -72,7 +72,10 @@ const elements = {
   downloadPdfBtn: document.getElementById('downloadPdfBtn'),
   successOrderId: document.getElementById('successOrderId'),
   successOrderTotal: document.getElementById('successOrderTotal'),
-  itemOrderBtns: document.querySelectorAll('.item-order-btn')
+  itemOrderBtns: document.querySelectorAll('.item-order-btn'),
+  orderAlert: document.getElementById('orderAlert'),
+  phoneError: document.getElementById('phoneError'),
+  phoneNumberInput: document.getElementById('phoneNumber')
 };
 
 // Initialize Canvas Context
@@ -280,6 +283,61 @@ function updateUserUI(user) {
   }
 }
 
+// Phone Number Validation Helper
+function isValidPhoneNumber(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const trimmed = phone.trim();
+  
+  // Extract digits only
+  const digitsOnly = trimmed.replace(/\D/g, '');
+
+  // Length must be between 10 and 15 digits
+  if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+    return false;
+  }
+
+  // Reject numbers with all identical digits (e.g., 0000000000)
+  if (/^(\d)\1+$/.test(digitsOnly)) {
+    return false;
+  }
+
+  // Check Indian mobile format (10 digits starting 6-9, or 12 digits starting 91 with 6-9, or 11 digits starting 0 with 6-9)
+  if (digitsOnly.length === 10) {
+    return /^[6-9]\d{9}$/.test(digitsOnly);
+  }
+  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+    return /^[6-9]\d{9}$/.test(digitsOnly.substring(2));
+  }
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return /^[6-9]\d{9}$/.test(digitsOnly.substring(1));
+  }
+
+  // General valid international number
+  return true;
+}
+
+function showOrderAlert(message) {
+  if (elements.orderAlert) {
+    elements.orderAlert.textContent = message;
+    elements.orderAlert.classList.remove('hidden');
+  }
+}
+
+function hideOrderAlert() {
+  if (elements.orderAlert) {
+    elements.orderAlert.textContent = '';
+    elements.orderAlert.classList.add('hidden');
+  }
+  if (elements.phoneError) {
+    elements.phoneError.textContent = '';
+    elements.phoneError.classList.add('hidden');
+  }
+  if (elements.phoneNumberInput) {
+    elements.phoneNumberInput.classList.remove('border-error', 'border-red-500');
+    elements.phoneNumberInput.classList.add('border-outline-variant');
+  }
+}
+
 function showAuthAlert(message, type = 'error') {
   elements.authAlert.classList.remove('hidden', 'bg-error/15', 'text-error', 'bg-secondary-container/50', 'text-on-secondary-container');
   if (type === 'error') {
@@ -332,6 +390,11 @@ async function handleSignUp(e) {
 
   if (!phone || phone.trim() === '') {
     showAuthAlert('Phone Number is mandatory for registration!', 'error');
+    return;
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    showAuthAlert('Please enter a valid 10-digit phone number (e.g. +91 7001832118)!', 'error');
     return;
   }
 
@@ -400,6 +463,8 @@ function triggerOrderFlow(preselectedItemId = null) {
     openAuthModal('Please sign in or create an account to order from Banerjee Sweets!');
     return;
   }
+
+  hideOrderAlert();
 
   if (preselectedItemId === 'rossogolla') {
     state.orderQuantities.rossogolla = Math.max(1, state.orderQuantities.rossogolla);
@@ -509,10 +574,41 @@ async function handleCheckoutSubmit(e) {
   const phone = document.getElementById('phoneNumber').value;
   const submitBtn = document.getElementById('placeOrderSubmitBtn');
 
+  hideOrderAlert();
+
+  // Validate Phone Number
+  if (!phone || !phone.trim()) {
+    showOrderAlert('Phone number is required!');
+    if (elements.phoneError) {
+      elements.phoneError.textContent = 'Please enter your phone number.';
+      elements.phoneError.classList.remove('hidden');
+    }
+    if (elements.phoneNumberInput) {
+      elements.phoneNumberInput.classList.remove('border-outline-variant');
+      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
+      elements.phoneNumberInput.focus();
+    }
+    return;
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    showOrderAlert('Invalid phone number! Please enter a valid 10-digit mobile number.');
+    if (elements.phoneError) {
+      elements.phoneError.textContent = 'Please enter a valid phone number (e.g. +91 7001832118 or 10-digit mobile number).';
+      elements.phoneError.classList.remove('hidden');
+    }
+    if (elements.phoneNumberInput) {
+      elements.phoneNumberInput.classList.remove('border-outline-variant');
+      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
+      elements.phoneNumberInput.focus();
+    }
+    return;
+  }
+
   const total = updateCheckoutTotal();
 
   if (total <= 0) {
-    alert('Please select at least 1 item to order!');
+    showOrderAlert('Please select at least 1 item to order!');
     return;
   }
 
@@ -667,6 +763,12 @@ function setupAuthAndOrderEvents() {
   });
 
   elements.checkoutForm.addEventListener('submit', handleCheckoutSubmit);
+
+  if (elements.phoneNumberInput) {
+    elements.phoneNumberInput.addEventListener('input', () => {
+      hideOrderAlert();
+    });
+  }
 }
 
 function setupEventListeners() {
