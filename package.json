@@ -1,0 +1,19 @@
+{
+  "name": "scroll-animation-showcase",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.9",
+    "isomorphic-git": "^1.40.0",
+    "jspdf": "^4.2.1"
+  }
+}

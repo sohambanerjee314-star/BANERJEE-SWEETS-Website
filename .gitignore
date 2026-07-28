@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Portable git tool
+mingit/
+mingit.zip
+
+# Production build
+dist/
+
+# OS / Environment files
+.DS_Store
+*.log
+.env
+.env.local

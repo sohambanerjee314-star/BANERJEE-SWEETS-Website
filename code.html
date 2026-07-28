@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Banerjee Sweets - Pure Love from Arambagh</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary": "#ffffff",
+                    "inverse-surface": "#34302c",
+                    "on-secondary-container": "#745c00",
+                    "secondary": "#735c00",
+                    "surface-container-lowest": "#ffffff",
+                    "inverse-on-surface": "#f8efea",
+                    "on-primary-fixed": "#410003",
+                    "surface-tint": "#ac322e",
+                    "outline-variant": "#e0bfbc",
+                    "surface-container": "#f5ece7",
+                    "secondary-container": "#fed65b",
+                    "on-error": "#ffffff",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-container": "#bcb5a8",
+                    "on-primary-container": "#ff9b92",
+                    "surface-bright": "#fff8f5",
+                    "on-background": "#1e1b18",
+                    "outline": "#8c716e",
+                    "tertiary-fixed": "#e9e2d3",
+                    "surface-dim": "#e1d8d4",
+                    "primary-container": "#8c1a1a",
+                    "error": "#ba1a1a",
+                    "primary-fixed": "#ffdad6",
+                    "on-tertiary-fixed": "#1e1b13",
+                    "surface-variant": "#e9e1dc",
+                    "on-surface": "#1e1b18",
+                    "on-primary-fixed-variant": "#8b1919",
+                    "error-container": "#ffdad6",
+                    "inverse-primary": "#ffb3ac",
+                    "background": "#fff8f5",
+                    "on-tertiary-fixed-variant": "#4b463c",
+                    "secondary-fixed-dim": "#e9c349",
+                    "tertiary-container": "#4b473c",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed": "#241a00",
+                    "surface-container-highest": "#e9e1dc",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed-dim": "#cdc6b8",
+                    "primary": "#6a0008",
+                    "surface": "#fff8f5",
+                    "secondary-fixed": "#ffe088",
+                    "on-surface-variant": "#58413f",
+                    "tertiary": "#343127",
+                    "primary-fixed-dim": "#ffb3ac",
+                    "surface-container-low": "#fbf2ed",
+                    "on-secondary-fixed-variant": "#574500",
+                    "surface-container-high": "#efe6e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "8px",
+                    "sm": "12px",
+                    "margin-desktop": "64px",
+                    "md": "24px",
+                    "xs": "4px",
+                    "lg": "48px",
+                    "xl": "80px",
+                    "margin-mobile": "16px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Playfair Display"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "headline-sm": ["Playfair Display"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "headline-md": ["Playfair Display"],
+                    "headline-lg-mobile": ["Playfair Display"],
+                    "display-lg": ["Playfair Display"]
+            },
+            "fontSize": {
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg": ["40px", {"lineHeight": "48px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-md": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                    "display-lg": ["56px", {"lineHeight": "64px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .hero-gradient {
+            background: linear-gradient(to right, rgba(255, 248, 245, 0.95) 0%, rgba(255, 248, 245, 0.7) 50%, rgba(255, 248, 245, 0) 100%);
+        }
+        .text-glow {
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+        }
+        .card-shadow {
+            box-shadow: 0 10px 40px -10px rgba(74, 50, 16, 0.08);
+        }
+        .floral-divider {
+            height: 48px;
+            width: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='20' viewBox='0 0 100 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 10C40 10 35 0 25 0C15 0 0 10 0 10C0 10 15 20 25 20C35 20 40 10 50 10ZM50 10C60 10 65 0 75 0C85 0 100 10 100 10C100 10 85 20 75 20C65 20 60 10 50 10Z' fill='%23735c00' fill-opacity='0.1'/%3E%3C/svg%3E");
+            background-repeat: repeat-x;
+            background-position: center;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-secondary-container selection:text-on-secondary-container">
+<!-- Top Navigation Bar -->
+<header class="bg-surface/80 backdrop-blur-md font-label-lg text-label-lg uppercase tracking-widest docked full-width top-0 sticky z-50 border-b border-secondary/10 shadow-sm">
+<nav class="flex justify-between items-center max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop py-4">
+<div class="font-headline-sm text-headline-sm font-bold text-primary">Banerjee Sweets</div>
+<div class="hidden md:flex items-center gap-xl">
+<a class="text-secondary border-b-2 border-secondary pb-1" href="#">Home</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Menu</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">About Us</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Contact</a>
+</div>
+<button class="bg-primary text-on-primary px-lg py-2 rounded-full font-label-lg hover:opacity-80 transition-opacity active:scale-95 duration-150">
+                Order Now
+            </button>
+</nav>
+</header>
+<!-- Hero Section -->
+<section class="relative min-h-[85vh] flex items-center overflow-hidden">
+<div class="absolute inset-0 z-0">
+<img alt="Banerjee Sweets Hero" class="w-full h-full object-cover object-center" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXrj00kezNJvuzMh79THmpXji--x6VKJqjq7dt18b7tJkOYdF_DKCHlkQMzUIYBs5v_KKzNI_iODeEZg1cB0MjRL5WOFZozio2UmjrwSEpfwSGc17k7Jpd1W8CLe-KbOOjG786gP_atobWiE_87lVL2NStjnmhyug281HferVRcEr6Eh7fslLtUWfjc7vBJ5S_IpFnonCEHacrq9U89RABUlqLjOBMvje7MI-7aLMPIgbW3T07lpg_Bks_bxZUbmo0xA"/>
+<div class="absolute inset-0 hero-gradient"></div>
+</div>
+<div class="relative z-10 max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop w-full">
+<div class="max-w-2xl">
+<span class="font-label-lg text-secondary tracking-[0.2em] uppercase mb-md block">Since Generations</span>
+<h1 class="font-display-lg text-display-lg text-primary mb-lg leading-tight">
+                    Pure Sweets, <br/>
+<span class="italic font-normal">Pure Love</span>
+</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-xl max-w-lg">
+                    Discover the artisanal heritage of Arambagh. Every piece of our confectionery is crafted with pure ghee, fresh milk, and a century of tradition.
+                </p>
+<div class="flex flex-wrap gap-md">
+<button class="bg-primary text-on-primary px-xl py-4 rounded-full font-label-lg uppercase tracking-widest shadow-lg hover:-translate-y-1 transition-all">
+                        Explore Our Menu
+                    </button>
+<button class="border-2 border-secondary text-secondary px-xl py-4 rounded-full font-label-lg uppercase tracking-widest hover:bg-secondary/5 transition-all">
+                        Our Story
+                    </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Floral Divider -->
+<div class="floral-divider my-xl"></div>
+<!-- Signature Delights Section -->
+<section class="max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop py-xl">
+<div class="text-center mb-xl">
+<span class="text-secondary font-label-lg tracking-widest uppercase">The Collection</span>
+<h2 class="font-headline-lg text-headline-lg text-primary mt-sm">Signature Delights</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- Rossogolla -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden card-shadow transition-all hover:-translate-y-2">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" data-alt="A high-end, close-up photograph of soft, spongy white Rossogolla balls floating in a clear, golden-tinted sugar syrup. The sweets are served in a premium white ceramic bowl, lit by warm, ambient golden hour sunlight that highlights the delicate texture. The background is a soft-focus cream-colored marble surface, conveying an atmosphere of artisanal luxury and purity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSgXSbgG4O-vHwX2nnPLQQNJUjy19q7na2Ru1L8kMiNLQuIKupiWlPusxh0J_re16_QNi6jDS9HaW2gsVYnY5PKHxgtCKTx4-srHUe1BHE7_09Jolu-hFbDT90K0tqrEAfZRpwATZ2UqBKIaZ4lj4rYvTvHKR7BCk8Yvk_hxu1ThNUZlOulICL6hkVWC0JtTv5S2kreKzBb6cLLhYibw8H8lbcUBKBR4zDXbf7ByAM6xB2k3pi3knW"/>
+<div class="absolute top-4 right-4 bg-secondary-container/90 text-on-secondary-container px-sm py-1 rounded-full font-label-lg">Best Seller</div>
+</div>
+<div class="p-lg text-center">
+<h3 class="font-headline-sm text-headline-sm text-primary mb-xs">Classic Rossogolla</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-md">The pride of Bengal, soft and spongy spheres of pure delight.</p>
+<span class="font-headline-sm text-secondary">₹120 <small class="font-label-lg text-on-surface-variant">/ 250g</small></span>
+</div>
+</div>
+<!-- Sandesh -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden card-shadow transition-all hover:-translate-y-2">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" data-alt="Exquisitely crafted Bengali Sandesh sweets arranged on a minimalist white porcelain plate. The Sandesh pieces feature intricate traditional floral patterns pressed into the surface, dusted with a hint of gold-leaf and crushed saffron. The lighting is soft and airy, creating a high-fashion food photography look against a warm cream and beige background. The overall aesthetic is elegant, tactile, and celebratory." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpkCw30ELKQArOr5bJIeq60J3pRhhUIqTUVMWdSl0ehEJtDcXCNTklT7TXg7RNmU1tiWjLfzYhXlEethbFowhuVf6gDSWywaQyv7U4VVCAZMVaj3NcIrs-VFprADF9N0hF-JrTZR2mDggrEwE-t01BrUjmPoUxNlMSpKAZJ4ha7Jw_uikgafpQ6pL1lxB-uj86Fc4jY2LCfl5seqZwZA3j3VDgG4PNLDV3xZA7UhPcqM8NK0CPdkpd"/>
+<div class="absolute top-4 right-4 bg-tertiary-container/90 text-tertiary-fixed px-sm py-1 rounded-full font-label-lg">Signature</div>
+</div>
+<div class="p-lg text-center">
+<h3 class="font-headline-sm text-headline-sm text-primary mb-xs">Nolen Gur Sandesh</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-md">Artisanal hand-pressed sweet made with winter's finest jaggery.</p>
+<span class="font-headline-sm text-secondary">₹180 <small class="font-label-lg text-on-surface-variant">/ 250g</small></span>
+</div>
+</div>
+<!-- Mishti Doi -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden card-shadow transition-all hover:-translate-y-2">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" data-alt="A rustic yet premium presentation of Mishti Doi served in traditional small terracotta earthen pots. The creamy, caramel-colored sweet yogurt is topped with sliced almonds and pistachios. The setting is a warm, sunlit kitchen counter with subtle cream-colored linen textures. The lighting emphasizes the thick, rich consistency of the yogurt and the authentic, handmade quality of the product." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1h3UUQA0y_yjhTTDrrbOXEwacbd2tamTq9AtYBbKEH740N1xqVgZ_KtobYjBT0MN2Y6titzbwxY58vxh5rL2025qX3sgPhqB2p6l5D8BRDYgLqfu0E4ekq3C3NpPHPYdwxt1HcALhf6WDK5tWuUQTgJ8k9Qqzs_Y2LB_34drrgRRIAd6CfltPpNfHZ2xH4tZLNIXuEq_E2pn3Fs5dDkTzmqBzGL1nPCkc6SjIi8PT7AIJOu6ZxGQW"/>
+<div class="absolute top-4 right-4 bg-secondary-container/90 text-on-secondary-container px-sm py-1 rounded-full font-label-lg">Classic</div>
+</div>
+<div class="p-lg text-center">
+<h3 class="font-headline-sm text-headline-sm text-primary mb-xs">Mishti Doi</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-md">Thick, creamy, caramelized yogurt served in traditional earthen pots.</p>
+<span class="font-headline-sm text-secondary">₹150 <small class="font-label-lg text-on-surface-variant">/ 500g</small></span>
+</div>
+</div>
+</div>
+</section>
+<!-- Our Story Section -->
+<section class="bg-surface-container-low py-xl overflow-hidden">
+<div class="max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-xl items-center">
+<div class="relative">
+<div class="absolute -top-10 -left-10 w-64 h-64 bg-secondary-container/20 rounded-full blur-3xl"></div>
+<div class="relative z-10 rounded-xl overflow-hidden shadow-2xl rotate-2">
+<img class="w-full h-auto aspect-[4/5] object-cover" data-alt="A cinematic, black and white photograph with a warm sepia tint showing a master confectioner at work in a traditional Indian kitchen. Clouds of flour and steam rise softly in the background as the artisan shapes fresh dough with experienced hands. The scene is lit by dramatic, low-key lighting, emphasizing the heritage, manual labor, and pure love poured into every sweet. The aesthetic is nostalgic, prestigious, and timeless." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGnu0PMzA5mMfwVRrItV0ZdSVqi9h4vNFaSbgU3YxdSWprIynWIKaol4syLrMaJu9uLH6BDBfbNIzBipRlzcQZ_6T25mbw63LCQAMiGYCjKIZVkNOnpWExCwzXh24Nj08BYMe2VaO2UNGkMu8NwB_paXRpRFL5cYePa8Z2hUUO_GFKGNDO7zl-M-fR2nl_mXpJgIfZJsJ6zvjZoydCHpr1pUJPYKToB2gLzZfLbpZxoUtT9rgre0F7"/>
+</div>
+<div class="absolute -bottom-6 -right-6 bg-white p-lg card-shadow rounded-lg z-20 max-w-[200px] -rotate-3">
+<p class="font-headline-sm text-primary italic">"Crafting sweetness since 1984"</p>
+</div>
+</div>
+<div class="md:pl-lg">
+<span class="text-secondary font-label-lg tracking-widest uppercase">Our Heritage</span>
+<h2 class="font-headline-lg text-headline-lg text-primary mt-sm mb-lg">From Arambagh with Love</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-md leading-relaxed">
+                        In the heart of Arambagh, what started as a small humble shop near the Hospital More has now become a landmark of purity and taste. 
+                    </p>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-lg leading-relaxed">
+                        At Banerjee Sweets, we believe that 'Mishti' isn't just food; it's a celebration of life's most precious moments. Our recipes have been passed down through three generations, ensuring that the Rossogolla you eat today tastes exactly like the one our grandfather first perfected.
+                    </p>
+<div class="flex items-center gap-md">
+<div class="flex flex-col">
+<span class="font-headline-md text-primary">100%</span>
+<span class="font-label-lg text-on-surface-variant uppercase">Pure Cow Milk</span>
+</div>
+<div class="w-px h-12 bg-outline-variant"></div>
+<div class="flex flex-col">
+<span class="font-headline-md text-primary">40+</span>
+<span class="font-label-lg text-on-surface-variant uppercase">Years Legacy</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Visit Us Section -->
+<section class="py-xl">
+<div class="max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop">
+<div class="bg-primary-container rounded-3xl overflow-hidden shadow-2xl relative">
+<div class="grid grid-cols-1 md:grid-cols-2">
+<div class="p-xl text-white flex flex-col justify-center">
+<h2 class="font-headline-lg text-headline-lg mb-lg text-on-primary">Visit Our Store</h2>
+<div class="space-y-lg">
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-secondary-fixed">location_on</span>
+<div>
+<h4 class="font-headline-sm text-secondary-fixed">Arambagh Hospital More</h4>
+<p class="font-body-md opacity-80">Near HDFC Bank, Arambagh, <br/>West Bengal 712601</p>
+</div>
+</div>
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-secondary-fixed">schedule</span>
+<div>
+<h4 class="font-headline-sm text-secondary-fixed">Opening Hours</h4>
+<p class="font-body-md opacity-80">Everyday: 7:00 AM - 10:00 PM</p>
+</div>
+</div>
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-secondary-fixed">call</span>
+<div>
+<h4 class="font-headline-sm text-secondary-fixed">Call Us</h4>
+<p class="font-body-md opacity-80">+91 98765 43210</p>
+</div>
+</div>
+</div>
+</div>
+<div class="h-80 md:h-auto relative">
+<img class="w-full h-full object-cover grayscale opacity-80 mix-blend-overlay" data-alt="A stylized map of Arambagh city, West Bengal, rendered in a beautiful cream and gold aesthetic. The map features elegant, thin lines and markers for key locations, emphasizing the 'Hospital More' area. The lighting is soft and golden, with a focus on the store's location. The style is premium and artisanal, matching the brand's luxury confectionery identity." data-location="Arambagh" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAoWeKGr72zAVb5827Ir4uvHMTcLLovkjUEvxI7RMUpyXK1CVusi9hTdtk0XUD0b3xuh8sc7jrwwsMOnwMsfkYM1vPd8sqDeThTMsRSsLxEPG5vjRoULJlShn-CenJxvZLjBBbUZ4TyWnE4rLOVbvELSgBE-uBmPBfRk5S0RUIJwtxyf_lma0-mKqofEXmI85B1sFhm4Krf7A9NgUYWQggJDNO_5iYD3BeML9QUwOW7FN-ewQlFG7dH"/>
+<div class="absolute inset-0 bg-primary/20"></div>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="bg-white p-sm rounded-full shadow-2xl animate-bounce">
+<span class="material-symbols-outlined text-primary scale-150">location_on</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-surface-container-highest font-body-md text-body-md">
+<div class="max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop py-xl">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter items-start">
+<div class="space-y-md">
+<div class="font-headline-sm text-headline-sm text-primary">Banerjee Sweets</div>
+<p class="text-on-surface-variant max-w-xs leading-relaxed">
+                        Bringing the authentic taste of Bengali sweets to your celebrations for over four decades. Pure ingredients, pure love.
+                    </p>
+<div class="flex gap-md">
+<a class="text-on-surface-variant hover:text-secondary transition-colors" href="#"><span class="material-symbols-outlined">qr_code_2</span></a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors" href="#"><span class="material-symbols-outlined">share</span></a>
+</div>
+</div>
+<div class="space-y-md">
+<h4 class="font-label-lg uppercase tracking-widest text-primary">Our Locations</h4>
+<ul class="space-y-sm text-on-surface-variant">
+<li><a class="hover:text-secondary transition-colors" href="#">Hospital More, Arambagh</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">Near HDFC Bank</a></li>
+</ul>
+</div>
+<div class="space-y-md">
+<h4 class="font-label-lg uppercase tracking-widest text-primary">Legal &amp; Privacy</h4>
+<ul class="space-y-sm text-on-surface-variant">
+<li><a class="hover:text-secondary transition-colors" href="#">Privacy Policy</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">Terms of Service</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">Returns &amp; Refunds</a></li>
+</ul>
+</div>
+</div>
+<div class="mt-xl pt-lg border-t border-outline-variant/30 flex flex-col md:flex-row justify-between items-center gap-md">
+<p class="text-on-surface-variant/70 text-sm">© 2024 Banerjee Sweets. Made with Pure Love in Arambagh.</p>
+<div class="flex items-center gap-xs text-secondary font-bold">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">favorite</span>
+<span>Sweetness Guaranteed</span>
+</div>
+</div>
+</div>
+</footer>
+<script>
+        // Simple scroll reveal for cards
+        const observerOptions = {
+            threshold: 0.1
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('opacity-100', 'translate-y-0');
+                    entry.target.classList.remove('opacity-0', 'translate-y-10');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.group.bg-surface-container-lowest').forEach(card => {
+            card.classList.add('opacity-0', 'translate-y-10', 'transition-all', 'duration-700');
+            observer.observe(card);
+        });
+    </script>
+</body></html>
