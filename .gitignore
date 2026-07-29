@@ -4,6 +4,8 @@ node_modules/
 # Portable git tool
 mingit/
 mingit.zip
+.git_bin/
+scratch_clear_storage.js
 
 # Production build
 dist/
@@ -13,4 +15,3 @@ dist/
 *.log
 .env
 .env.local
-scratch_clear_storage.js
