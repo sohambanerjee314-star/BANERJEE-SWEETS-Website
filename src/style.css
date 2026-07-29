@@ -24,11 +24,13 @@ body {
   overflow-x: hidden;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-primary);
@@ -132,7 +134,7 @@ body {
 /* Sticky Canvas Scroll Sequence Container */
 .sequence-section {
   position: relative;
-  height: 400vh; /* Smooth scroll space for 240 frames */
+  height: 400vh;
 }
 
 .sticky-wrapper {
@@ -144,7 +146,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #e8cd7d; /* Warm gold background matching animation theme */
+  background: #e8cd7d;
 }
 
 .canvas-container {
@@ -168,9 +170,34 @@ body {
   display: none !important;
 }
 
-/* Responsive Media Queries */
+/* Responsive Table Container */
+.responsive-table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile Touch Optimization */
 @media (max-width: 768px) {
   .sequence-section {
     height: 350vh;
+  }
+
+  /* Prevent auto-zoom on mobile input focus */
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="url"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Touch target sizes */
+  button, 
+  a, 
+  input[type="button"], 
+  input[type="submit"] {
+    min-height: 40px;
   }
 }

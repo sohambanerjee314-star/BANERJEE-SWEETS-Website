@@ -13,3 +13,4 @@ dist/
 *.log
 .env
 .env.local
+scratch_clear_storage.js

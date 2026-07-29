@@ -163,11 +163,14 @@
   </div>
 
   <!-- Transparent Fixed Top Navigation Bar -->
-  <header id="mainNav" class="bg-surface/90 backdrop-blur-md font-label-lg text-label-lg uppercase tracking-widest fixed top-0 left-0 right-0 z-50 border-b border-secondary/10 shadow-sm transition-all duration-300">
-    <nav class="flex justify-between items-center max-w-[1280px] mx-auto px-margin-mobile md:px-margin-desktop py-3">
-      <a href="#sequence" class="font-headline-sm text-headline-sm font-bold text-primary tracking-wide flex items-center gap-2">
+  <header id="mainNav" class="bg-surface/95 backdrop-blur-md font-label-lg text-label-lg uppercase tracking-widest fixed top-0 left-0 right-0 z-50 border-b border-secondary/10 shadow-sm transition-all duration-300">
+    <nav class="flex justify-between items-center max-w-[1280px] mx-auto px-4 md:px-margin-desktop py-2.5">
+      <!-- 1. Shop's Name -->
+      <a href="#sequence" class="font-headline-sm text-base md:text-headline-sm font-bold text-primary tracking-wide flex items-center gap-2 shrink-0">
         <span>Banerjee Sweets</span>
       </a>
+
+      <!-- Desktop Nav Menu -->
       <div class="hidden md:flex items-center gap-8">
         <a class="nav-menu-item text-secondary border-b-2 border-secondary pb-1 transition-colors" href="#sequence">Home</a>
         <a class="nav-menu-item text-on-surface-variant hover:text-primary transition-colors" href="#signature-delights">Menu</a>
@@ -175,32 +178,132 @@
         <a class="nav-menu-item text-on-surface-variant hover:text-primary transition-colors" href="#visit-us">Contact</a>
       </div>
 
-      <!-- Auth & Order Controls -->
-      <div class="flex items-center gap-3">
-        <!-- Guest Auth Button -->
-        <button id="openAuthModalBtn" class="border border-primary text-primary px-4 py-2 rounded-full font-label-lg hover:bg-primary/10 transition-all text-xs md:text-sm">
-          Sign In / Sign Up
+      <!-- Right Controls: 2. My Profile & 3. 3 Horizontal Lines (Hamburger Menu) -->
+      <div class="flex items-center gap-2 md:gap-3 shrink-0">
+        <!-- Guest Auth Button (Desktop: Full label, Mobile: Compact profile icon) -->
+        <button id="openAuthModalBtn" class="border border-primary text-primary px-2.5 md:px-3.5 py-1.5 rounded-full font-label-lg hover:bg-primary/10 transition-all text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer">
+          <span class="material-symbols-outlined text-lg">account_circle</span>
+          <span class="hidden md:inline">Sign In / Sign Up</span>
         </button>
 
-        <!-- Authenticated User Profile -->
-        <div id="userProfileNav" class="hidden items-center gap-3">
-          <div class="flex items-center gap-2 bg-secondary-container/40 px-3 py-1.5 rounded-full border border-secondary/20">
-            <span class="material-symbols-outlined text-primary text-sm">account_circle</span>
-            <span id="userEmailText" class="text-xs font-semibold text-primary truncate max-w-[120px]">user@example.com</span>
-          </div>
-          <button id="signOutBtn" class="text-xs text-on-surface-variant hover:text-error transition-colors underline" title="Sign Out">
-            Sign Out
+        <!-- Authenticated User Profile (Desktop: Full avatar + email + role badge + buttons, Mobile: ONLY Profile Avatar Icon) -->
+        <div id="userProfileNav" class="hidden items-center gap-2 md:gap-2.5">
+          <!-- 2. My Profile Button (Visible on both Mobile and Desktop) -->
+          <button id="openProfileModalBtn" class="flex items-center gap-1.5 bg-secondary-container/60 hover:bg-secondary-container p-1 md:px-2.5 md:py-1 rounded-full border border-secondary/30 transition-all cursor-pointer shadow-2xs" title="View Account Profile">
+            <img id="headerUserAvatarImg" class="w-6 h-6 rounded-full object-cover hidden border border-primary/40" src="" alt="Avatar" />
+            <span id="headerUserAvatarIcon" class="material-symbols-outlined text-primary text-xl">account_circle</span>
+            <span id="userEmailText" class="hidden md:inline-block text-xs font-semibold text-primary truncate max-w-[140px] md:max-w-[180px]">user@example.com</span>
+            <span id="userRoleBadge" class="hidden md:inline-block text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">Customer</span>
+          </button>
+
+          <!-- Order Now Button (Desktop Customer Panel, placed RIGHT AFTER Profile Icon Button) -->
+          <button id="orderNowNavBtn" class="hidden md:flex bg-primary text-on-primary px-4 py-1.5 rounded-full font-label-lg hover:opacity-90 transition-opacity active:scale-95 duration-150 shadow-md text-xs items-center gap-1 cursor-pointer">
+            <span class="material-symbols-outlined text-sm">shopping_bag</span>
+            <span>Order Now</span>
+          </button>
+
+          <!-- Admin Controller Icon (Mobile: Controller Icon only, Desktop: Full button) -->
+          <button id="adminPortalBtn" class="hidden border border-secondary bg-secondary-container text-on-secondary-container p-1.5 md:px-3 md:py-1.5 rounded-full text-xs font-semibold hover:opacity-90 transition-all items-center gap-1 shadow-2xs cursor-pointer" title="Admin Controller Portal">
+            <span class="material-symbols-outlined text-lg md:text-sm">admin_panel_settings</span>
+            <span class="hidden md:inline">Admin Portal</span>
+          </button>
+
+          <button id="myOrdersBtn" class="hidden md:flex border border-outline-variant text-on-surface text-xs px-3 py-1.5 rounded-full font-semibold hover:bg-surface-container transition-all items-center gap-1 shadow-2xs">
+            <span class="material-symbols-outlined text-sm">receipt_long</span>
+            <span>My Orders</span>
+          </button>
+
+          <button id="openResetModalBtn" class="hidden lg:flex border border-outline-variant text-on-surface text-xs px-2.5 py-1.5 rounded-full font-semibold hover:bg-surface-container transition-all items-center gap-1" title="Reset Password">
+            <span class="material-symbols-outlined text-sm">lock_reset</span>
+            <span>Reset Password</span>
+          </button>
+
+          <button id="signOutBtn" class="hidden md:flex items-center gap-1 text-xs font-bold text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-full transition-all shadow-2xs cursor-pointer" title="Sign Out">
+            <span class="material-symbols-outlined text-sm">logout</span>
+            <span>Sign Out</span>
           </button>
         </div>
 
-        <!-- Order Now Button -->
-        <button id="orderNowNavBtn" class="bg-primary text-on-primary px-5 py-2 rounded-full font-label-lg hover:opacity-90 transition-opacity active:scale-95 duration-150 shadow-md text-xs md:text-sm flex items-center gap-1">
-          <span class="material-symbols-outlined text-base">shopping_bag</span>
+        <!-- Guest Order Now Button (Desktop Guests, placed right after Sign In button) -->
+        <button id="guestOrderNowNavBtn" class="hidden md:flex bg-primary text-on-primary px-4 py-1.5 rounded-full font-label-lg hover:opacity-90 transition-opacity active:scale-95 duration-150 shadow-md text-xs items-center gap-1 cursor-pointer">
+          <span class="material-symbols-outlined text-sm">shopping_bag</span>
           <span>Order Now</span>
+        </button>
+
+        <!-- 3. Mobile 3 Horizontal Lines (Hamburger Menu Toggle) -->
+        <button id="mobileMenuToggleBtn" class="md:hidden p-1.5 text-on-surface-variant hover:text-primary transition-colors focus:outline-none flex items-center justify-center rounded-lg border border-outline-variant/40 cursor-pointer active:scale-95 ml-1" aria-label="Toggle Navigation Menu">
+          <span class="material-symbols-outlined text-2xl">menu</span>
         </button>
       </div>
     </nav>
   </header>
+
+  <!-- Mobile Slide-over Drawer -->
+  <div id="mobileNavDrawer" class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm hidden transition-opacity">
+    <div class="bg-surface-container-lowest w-[290px] max-w-[85vw] h-full shadow-2xl flex flex-col p-5 border-l border-outline-variant/40 overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-outline-variant/40 pb-4 mb-4">
+        <div class="font-bold text-primary text-base flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-secondary">storefront</span>
+          <span>Banerjee Sweets</span>
+        </div>
+        <button id="closeMobileNavDrawerBtn" class="text-on-surface-variant hover:text-primary text-xl font-bold p-1 cursor-pointer">✕</button>
+      </div>
+
+      <!-- Mobile Nav Links -->
+      <div class="flex flex-col gap-2 font-semibold text-xs tracking-wider mb-6">
+        <a class="mobile-nav-link p-2.5 rounded-lg bg-surface-container/60 text-secondary border-l-4 border-secondary flex items-center gap-2" href="#sequence">
+          <span class="material-symbols-outlined text-base">home</span> Home
+        </a>
+        <a class="mobile-nav-link p-2.5 rounded-lg hover:bg-surface-container text-on-surface flex items-center gap-2" href="#signature-delights">
+          <span class="material-symbols-outlined text-base">restaurant_menu</span> Menu & Order
+        </a>
+        <a class="mobile-nav-link p-2.5 rounded-lg hover:bg-surface-container text-on-surface flex items-center gap-2" href="#our-story">
+          <span class="material-symbols-outlined text-base">info</span> About Us
+        </a>
+        <a class="mobile-nav-link p-2.5 rounded-lg hover:bg-surface-container text-on-surface flex items-center gap-2" href="#visit-us">
+          <span class="material-symbols-outlined text-base">location_on</span> Contact Us
+        </a>
+      </div>
+
+      <!-- Mobile User Profile & Guest Actions -->
+      <div id="mobileUserSection" class="mt-auto border-t border-outline-variant/40 pt-4 space-y-3">
+        <!-- Mobile Order Sweets Quick Button -->
+        <button id="mobileOrderNowBtn" class="w-full bg-primary text-on-primary py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer hover:opacity-90 active:scale-95 transition-all">
+          <span class="material-symbols-outlined text-base">shopping_bag</span>
+          <span>Order Sweets Now</span>
+        </button>
+
+        <!-- Guest Mobile Auth Button -->
+        <button id="mobileGuestAuthBtn" class="w-full border border-primary text-primary py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors cursor-pointer">
+          <span class="material-symbols-outlined text-base">login</span>
+          <span>Sign In / Sign Up</span>
+        </button>
+
+        <!-- Logged In User Mobile Info -->
+        <div id="mobileUserInfo" class="hidden bg-surface-container p-3.5 rounded-xl border border-outline-variant/30 space-y-2.5">
+          <div class="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Logged In Account</div>
+          <div id="mobileUserEmail" class="text-xs font-bold text-primary truncate">user@example.com</div>
+          <div class="flex items-center gap-2">
+            <span id="mobileUserRole" class="inline-block text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary/20 text-primary">Customer</span>
+          </div>
+
+          <div class="pt-2 flex flex-col gap-2 border-t border-outline-variant/30">
+            <button id="mobileMyOrdersBtn" class="w-full border border-outline-variant bg-surface-container-lowest text-on-surface py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 hover:bg-surface-container-high transition-colors cursor-pointer">
+              <span class="material-symbols-outlined text-sm">receipt_long</span> My Orders
+            </button>
+            <button id="mobileAdminPortalBtn" class="hidden w-full bg-secondary-container text-on-secondary-container py-2 rounded-lg text-xs font-semibold items-center justify-center gap-2 hover:opacity-90 transition-opacity cursor-pointer">
+              <span class="material-symbols-outlined text-sm">admin_panel_settings</span> Admin Portal
+            </button>
+          </div>
+        </div>
+
+        <button id="mobileSignOutBtn" class="hidden w-full bg-red-100 text-red-900 border border-red-300 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition-colors cursor-pointer">
+          <span class="material-symbols-outlined text-base">logout</span>
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Pure Isolated Animation Screen with Fading Headline -->
   <section id="sequence" class="sequence-section">
@@ -229,7 +332,7 @@
       <span class="text-secondary font-label-lg tracking-widest uppercase">The Collection</span>
       <h2 class="font-headline-lg text-headline-lg text-primary mt-sm">Signature Delights</h2>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+    <div id="signatureProductsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
       <!-- Rossogolla -->
       <div class="group bg-surface-container-lowest rounded-xl overflow-hidden card-shadow transition-all hover:-translate-y-2 flex flex-col justify-between">
         <div>
@@ -431,7 +534,7 @@
       </div>
 
       <!-- Auth Tab Switches -->
-      <div class="flex border-b border-outline-variant mb-6">
+      <div id="authTabs" class="flex border-b border-outline-variant mb-6">
         <button id="tabSignInBtn" class="flex-1 py-2 text-sm font-semibold text-primary border-b-2 border-primary transition-all">
           Sign In
         </button>
@@ -443,14 +546,17 @@
       <!-- Alert Box -->
       <div id="authAlert" class="hidden mb-4 p-3 rounded-lg text-xs font-medium"></div>
 
-      <!-- Sign In Form (Email & Password only) -->
+      <!-- Sign In Form -->
       <form id="signInForm" class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Email Address</label>
           <input type="email" id="signInEmail" required class="w-full px-4 py-2.5 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="name@example.com" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Password</label>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-xs font-semibold text-on-surface-variant uppercase">Password</label>
+            <button type="button" id="openForgotPassBtn" class="text-xs text-primary font-semibold hover:underline">Forgot password?</button>
+          </div>
           <div class="relative flex items-center">
             <input type="password" id="signInPassword" required class="w-full px-4 py-2.5 pr-10 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="••••••••" />
             <button type="button" id="toggleSignInPasswordBtn" class="absolute right-3 text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center p-1" title="Toggle password visibility">
@@ -463,7 +569,24 @@
         </button>
       </form>
 
-      <!-- Sign Up Form (Name, Email, MANDATORY Phone, Password) -->
+      <!-- Forgot Password Form -->
+      <form id="forgotPasswordForm" class="space-y-4 hidden">
+        <p class="text-xs text-on-surface-variant leading-relaxed">Enter your registered email address below. We'll send you an email link to reset your password.</p>
+        <div>
+          <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Email Address</label>
+          <input type="email" id="forgotPassEmail" required class="w-full px-4 py-2.5 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="name@example.com" />
+        </div>
+        <button type="submit" id="forgotPassSubmitBtn" class="w-full bg-primary text-on-primary py-3 rounded-full font-label-lg uppercase tracking-wider hover:opacity-90 transition-opacity font-semibold shadow-md">
+          Send Reset Link
+        </button>
+        <div class="text-center mt-3">
+          <button type="button" id="backToSignInBtn" class="text-xs text-secondary font-semibold hover:underline flex items-center justify-center gap-1 mx-auto">
+            <span class="material-symbols-outlined text-sm">arrow_back</span> Back to Sign In
+          </button>
+        </div>
+      </form>
+
+      <!-- Sign Up Form (Name, Email, MANDATORY Phone, Password, Role Selection) -->
       <form id="signUpForm" class="space-y-4 hidden">
         <div>
           <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Full Name</label>
@@ -486,6 +609,21 @@
             </button>
           </div>
         </div>
+        <div class="pt-1">
+          <button type="button" id="toggleAdminPasscodeFieldBtn" class="text-[11px] text-on-surface-variant hover:text-primary underline font-medium flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs">admin_panel_settings</span> Have an Admin Security Passcode?
+          </button>
+          <div id="adminPasscodeContainer" class="hidden mt-2">
+            <label class="block text-xs font-semibold text-amber-800 uppercase mb-1">Admin Security Passcode</label>
+            <div class="relative flex items-center">
+              <input type="password" id="signUpAdminCode" class="w-full px-4 py-2 pr-10 rounded-lg border border-amber-400 bg-amber-50 text-amber-900 focus:outline-none focus:border-amber-600 text-xs font-mono" placeholder="Enter store admin passcode" />
+              <button type="button" id="toggleAdminCodePasswordBtn" class="absolute right-3 text-amber-700 hover:text-amber-900 transition-colors flex items-center justify-center p-1" title="Toggle passcode visibility">
+                <span id="adminCodeEyeIcon" class="material-symbols-outlined text-lg select-none">visibility</span>
+              </button>
+            </div>
+            <p class="text-[10px] text-on-surface-variant mt-1">Requires valid store passcode to grant Admin privileges.</p>
+          </div>
+        </div>
         <button type="submit" id="signUpSubmitBtn" class="w-full bg-secondary text-on-secondary py-3 rounded-full font-label-lg uppercase tracking-wider hover:opacity-90 transition-opacity font-semibold shadow-md">
           Create Account
         </button>
@@ -494,13 +632,13 @@
   </div>
 
   <!-- ================= ORDER CHECKOUT MODAL ================= -->
-  <div id="orderModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity overflow-y-auto">
-    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl relative my-8">
-      <button id="closeOrderModalBtn" class="absolute top-4 right-4 text-on-surface-variant hover:text-primary transition-colors text-xl font-bold">
+  <div id="orderModal" class="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 pt-16 md:p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity overflow-y-auto">
+    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-5 pt-8 md:p-8 max-w-lg w-full shadow-2xl relative my-4 md:my-8">
+      <button id="closeOrderModalBtn" class="absolute top-3.5 right-3.5 w-9 h-9 rounded-full bg-surface-container/80 hover:bg-secondary-container text-on-surface-variant hover:text-primary transition-all flex items-center justify-center text-lg font-bold shadow-xs cursor-pointer active:scale-95" title="Close and return to Home">
         ✕
       </button>
 
-      <div class="text-center mb-6">
+      <div class="text-center mb-6 pt-2 md:pt-0">
         <h3 class="font-headline-sm text-2xl text-primary font-bold">Place Your Order</h3>
         <p class="text-xs text-on-surface-variant mt-1">Fresh artisanal sweets delivered straight from Arambagh</p>
       </div>
@@ -566,9 +704,49 @@
             <textarea id="deliveryAddress" required rows="2" class="w-full px-4 py-2 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="Street, landmark, ward number, Arambagh"></textarea>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Phone Number <span class="text-error font-bold">*</span></label>
-            <input type="tel" id="phoneNumber" required class="w-full px-4 py-2.5 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm transition-colors" placeholder="+91 7001832118" />
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-semibold text-on-surface-variant uppercase">Mobile Phone Number <span class="text-error font-bold">*</span></label>
+              <button type="button" id="sendOtpBtn" class="text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer">
+                <span class="material-symbols-outlined text-xs">sms</span>
+                <span>Send OTP</span>
+              </button>
+            </div>
+            <div class="flex gap-2">
+              <input type="tel" id="phoneNumber" required class="flex-1 px-4 py-2.5 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm transition-colors" placeholder="+91 7001832118" />
+              <button type="button" id="triggerOtpBtn" class="bg-secondary-container hover:bg-secondary-container/80 text-on-secondary-container border border-secondary/40 px-3 py-2 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">mark_email_read</span>
+                <span>Get OTP</span>
+              </button>
+            </div>
             <p id="phoneError" class="text-xs text-error font-semibold mt-1 hidden"></p>
+          </div>
+
+          <!-- OTP Verification Container (Initially Hidden until Get OTP is clicked) -->
+          <div id="otpContainer" class="hidden bg-surface-container-low border border-primary/30 p-3.5 rounded-xl space-y-2.5 shadow-xs">
+            <div class="flex justify-between items-center">
+              <label class="block text-[11px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">lock_clock</span> Enter 6-Digit Verification OTP
+              </label>
+              <span id="otpTimerText" class="text-[10px] text-on-surface-variant font-semibold">Resend in 30s</span>
+            </div>
+            
+            <!-- Live SMS Toast Box -->
+            <div id="otpNoticeBox" class="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-600 text-base shrink-0">sms</span>
+              <span id="otpNoticeText">SMS OTP Sent to your phone!</span>
+            </div>
+
+            <div class="flex gap-2">
+              <input type="text" id="checkoutOtpInput" maxlength="6" class="flex-1 px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs font-mono font-bold text-center tracking-widest text-primary focus:outline-none focus:border-primary" placeholder="______" />
+              <button type="button" id="verifyOtpBtn" class="bg-primary text-on-primary px-4 py-2 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shrink-0 cursor-pointer">
+                Verify OTP
+              </button>
+            </div>
+            <p id="otpErrorText" class="text-[11px] font-bold text-error hidden"></p>
+            <div id="otpSuccessBadge" class="hidden p-2 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1">
+              <span class="material-symbols-outlined text-sm">verified</span>
+              <span>Mobile Phone Verified Successfully!</span>
+            </div>
           </div>
         </div>
 
@@ -614,6 +792,323 @@
         <button id="closeSuccessModalBtn" class="flex-1 bg-primary text-on-primary py-3 rounded-full font-label-lg uppercase tracking-wider hover:opacity-90 transition-opacity font-semibold text-xs shadow-md">
           Back to Website
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= RESET PASSWORD MODAL ================= -->
+  <div id="resetPasswordModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity">
+    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
+      <button id="closeResetModalBtn" class="absolute top-4 right-4 text-on-surface-variant hover:text-primary transition-colors text-xl font-bold">✕</button>
+      <div class="text-center mb-6">
+        <div class="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+          <span class="material-symbols-outlined text-primary text-2xl">lock_reset</span>
+        </div>
+        <h3 class="font-headline-sm text-2xl text-primary font-bold">Reset Password</h3>
+        <p class="text-xs text-on-surface-variant mt-1">Set a new password for your Banerjee Sweets account</p>
+      </div>
+      <div id="resetAlert" class="hidden mb-4 p-3 rounded-lg text-xs font-medium"></div>
+      <form id="resetPasswordForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">New Password</label>
+          <div class="relative flex items-center">
+            <input type="password" id="newResetPassword" required minlength="6" class="w-full px-4 py-2.5 pr-10 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="At least 6 characters" />
+            <button type="button" id="toggleNewResetPasswordBtn" class="absolute right-3 text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center p-1" title="Toggle password visibility">
+              <span id="newResetEyeIcon" class="material-symbols-outlined text-lg select-none">visibility</span>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Confirm New Password</label>
+          <div class="relative flex items-center">
+            <input type="password" id="confirmResetPassword" required minlength="6" class="w-full px-4 py-2.5 pr-10 rounded-lg border border-outline-variant bg-surface text-on-background focus:outline-none focus:border-primary text-sm" placeholder="Re-enter new password" />
+            <button type="button" id="toggleConfirmResetPasswordBtn" class="absolute right-3 text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center p-1" title="Toggle password visibility">
+              <span id="confirmResetEyeIcon" class="material-symbols-outlined text-lg select-none">visibility</span>
+            </button>
+          </div>
+        </div>
+        <button type="submit" id="resetPasswordSubmitBtn" class="w-full bg-primary text-on-primary py-3 rounded-full font-label-lg uppercase tracking-wider hover:opacity-90 transition-opacity font-semibold shadow-md">
+          Update Password
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= USER PROFILE MODAL ================= -->
+  <div id="userProfileModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity">
+    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
+      <button id="closeProfileModalBtn" class="absolute top-4 right-4 text-on-surface-variant hover:text-primary transition-colors text-xl font-bold">✕</button>
+
+      <div class="text-center mb-6">
+        <!-- Interactive Avatar Container -->
+        <div class="relative w-20 h-20 mx-auto mb-2">
+          <img id="profileAvatarImg" class="w-20 h-20 rounded-full object-cover border-2 border-primary/40 shadow-md hidden" src="" alt="Profile Picture" />
+          <div id="profileAvatarIcon" class="w-20 h-20 bg-primary/10 text-primary rounded-full flex items-center justify-center shadow-inner">
+            <span class="material-symbols-outlined text-5xl">account_circle</span>
+          </div>
+          <label for="profileAvatarFileInput" class="absolute bottom-0 right-0 bg-primary text-on-primary p-1.5 rounded-full shadow-lg cursor-pointer hover:scale-110 active:scale-95 transition-transform" title="Upload or Change Profile Picture">
+            <span class="material-symbols-outlined text-sm block">photo_camera</span>
+            <input type="file" id="profileAvatarFileInput" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <button id="removeProfileAvatarBtn" class="hidden mx-auto text-[11px] font-semibold text-red-600 hover:text-red-800 hover:underline flex items-center justify-center gap-1 mb-2">
+          <span class="material-symbols-outlined text-xs">delete</span>
+          <span>Remove Picture</span>
+        </button>
+        <h3 id="profileNameHeading" class="font-headline-sm text-xl text-primary font-bold">User Profile</h3>
+        <p class="text-xs text-on-surface-variant mt-0.5">Tap camera to change picture or delete to remove</p>
+      </div>
+
+      <div class="space-y-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 text-xs mb-6">
+        <div class="flex justify-between py-1 border-b border-outline-variant/20">
+          <span class="text-on-surface-variant font-semibold">Full Name</span>
+          <span id="profileNameVal" class="font-bold text-on-background">User</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-outline-variant/20">
+          <span class="text-on-surface-variant font-semibold">Email Address</span>
+          <span id="profileEmailVal" class="font-bold text-primary truncate max-w-[200px]">user@example.com</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-outline-variant/20">
+          <span class="text-on-surface-variant font-semibold">Account Role</span>
+          <span id="profileRoleVal" class="font-bold uppercase px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px]">Customer</span>
+        </div>
+        <div class="flex justify-between py-1">
+          <span class="text-on-surface-variant font-semibold">Phone Number</span>
+          <span id="profilePhoneVal" class="font-bold text-secondary">Not provided</span>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <button id="profileAdminPortalBtn" class="hidden w-full bg-secondary-container hover:opacity-90 text-on-secondary-container border border-secondary/40 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer">
+          <span class="material-symbols-outlined text-base">admin_panel_settings</span>
+          <span>Open Admin Management Portal</span>
+        </button>
+        <button id="profileMyOrdersBtn" class="w-full bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/60 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+          <span class="material-symbols-outlined text-base text-primary">receipt_long</span>
+          <span>View My Order History</span>
+        </button>
+        <button id="profileResetPassBtn" class="w-full bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/60 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+          <span class="material-symbols-outlined text-base text-primary">lock_reset</span>
+          <span>Reset Account Password</span>
+        </button>
+        <button id="profileSignOutBtn" class="w-full bg-red-100 hover:bg-red-200 text-red-900 border border-red-300 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+          <span class="material-symbols-outlined text-base">logout</span>
+          <span>Sign Out of Account</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ADMIN DASHBOARD MODAL ================= -->
+  <div id="adminDashboardModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity overflow-y-auto">
+    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-6 md:p-8 max-w-5xl w-full shadow-2xl relative my-8 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-outline-variant pb-4 mb-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-secondary-container text-on-secondary-container p-2 rounded-xl">
+            <span class="material-symbols-outlined text-2xl">admin_panel_settings</span>
+          </div>
+          <div>
+            <h3 class="font-headline-sm text-2xl text-primary font-bold">Admin Management Portal</h3>
+            <p class="text-xs text-on-surface-variant">Banerjee Sweets - Product Inventory & Stock Controls</p>
+          </div>
+        </div>
+        <button id="closeAdminModalBtn" class="text-on-surface-variant hover:text-primary transition-colors text-xl font-bold p-1">✕</button>
+      </div>
+      <!-- Tab Navigation / Section Header for Admin Management Portal -->
+      <div class="flex border-b border-outline-variant/40 mb-4 gap-4">
+        <button id="adminTabOrdersBtn" class="pb-2 text-xs md:text-sm font-bold text-primary border-b-2 border-primary flex items-center gap-1.5 cursor-pointer">
+          <span class="material-symbols-outlined text-base">receipt_long</span>
+          <span>Customer Orders & Tracking</span>
+        </button>
+        <button id="adminTabProductsBtn" class="pb-2 text-xs md:text-sm font-semibold text-on-surface-variant hover:text-primary border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer">
+          <span class="material-symbols-outlined text-base">inventory_2</span>
+          <span>Product Inventory & Stock</span>
+        </button>
+      </div>
+
+      <!-- Section 1: Customer Orders & Tracking Management -->
+      <div id="adminOrdersSection" class="flex-1 overflow-y-auto space-y-5">
+        <!-- Stat KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-surface-container border border-outline-variant/40 p-3.5 rounded-xl flex items-center gap-3">
+            <div class="bg-primary/10 text-primary p-2.5 rounded-lg">
+              <span class="material-symbols-outlined text-xl">shopping_cart</span>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase font-bold text-on-surface-variant">Total Orders</p>
+              <h4 id="adminTotalOrders" class="text-xl font-bold text-primary">0</h4>
+            </div>
+          </div>
+          <div class="bg-surface-container border border-outline-variant/40 p-3.5 rounded-xl flex items-center gap-3">
+            <div class="bg-amber-100 text-amber-900 p-2.5 rounded-lg">
+              <span class="material-symbols-outlined text-xl">pending</span>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase font-bold text-on-surface-variant">Pending Orders</p>
+              <h4 id="adminPendingOrders" class="text-xl font-bold text-amber-800">0</h4>
+            </div>
+          </div>
+          <div class="bg-surface-container border border-outline-variant/40 p-3.5 rounded-xl flex items-center gap-3">
+            <div class="bg-emerald-100 text-emerald-900 p-2.5 rounded-lg">
+              <span class="material-symbols-outlined text-xl">payments</span>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase font-bold text-on-surface-variant">Total Revenue</p>
+              <h4 id="adminTotalRevenue" class="text-xl font-bold text-emerald-800">₹0</h4>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center bg-surface-container p-3.5 rounded-xl border border-outline-variant/40">
+          <div>
+            <h4 class="font-bold text-sm text-primary uppercase tracking-wider">Customer Orders List</h4>
+            <p class="text-[11px] text-on-surface-variant mt-0.5">Track live orders and update status (Pending, Confirmed, Processing, Out for Delivery, Successful, Cancelled).</p>
+          </div>
+          <button id="refreshAdminOrdersBtn" class="bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-3 py-1.5 rounded-lg text-xs font-bold border border-outline-variant/60 flex items-center gap-1 transition-all">
+            <span class="material-symbols-outlined text-sm">refresh</span>
+            <span>Refresh Orders</span>
+          </button>
+        </div>
+
+        <!-- Orders Table -->
+        <div class="overflow-x-auto border border-outline-variant/40 rounded-xl">
+          <table class="w-full text-left text-xs text-on-surface">
+            <thead class="bg-surface-container-high text-on-surface font-semibold border-b border-outline-variant/40 uppercase">
+              <tr>
+                <th class="p-3">Order ID</th>
+                <th class="p-3">Customer Email</th>
+                <th class="p-3">Phone</th>
+                <th class="p-3">Items Purchased</th>
+                <th class="p-3">Total (₹)</th>
+                <th class="p-3">Current Status</th>
+                <th class="p-3">Update Order Status</th>
+              </tr>
+            </thead>
+            <tbody id="adminOrdersTableBody" class="divide-y divide-outline-variant/20">
+              <tr><td colspan="7" class="p-6 text-center text-on-surface-variant">Fetching customer orders...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Section 2: Product Inventory Management (Collapsable/Tabbed) -->
+      <div id="adminProductsSection" class="hidden flex-1 overflow-y-auto space-y-5">
+        <div class="flex justify-between items-center bg-surface-container p-4 rounded-xl border border-outline-variant/40">
+          <div>
+            <h4 class="font-bold text-sm text-primary uppercase tracking-wider">Product Inventory & Stock Controls</h4>
+            <p class="text-[11px] text-on-surface-variant mt-0.5">Set product prices, unit weights, and toggle stock availability live for customers.</p>
+          </div>
+          <button id="toggleAddProductFormBtn" class="bg-primary text-on-primary px-4 py-2 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm">
+            <span class="material-symbols-outlined text-sm">add_box</span>
+            <span>Add New Product</span>
+          </button>
+        </div>
+
+        <!-- Add New Product Form Container (Collapsable) -->
+        <form id="adminAddProductFormContainer" class="hidden bg-surface-container-low border border-primary/30 p-5 rounded-2xl space-y-4 shadow-md">
+          <h5 class="font-bold text-xs uppercase text-primary tracking-wider flex items-center gap-1.5 border-b border-outline-variant/40 pb-2">
+            <span class="material-symbols-outlined text-base">post_add</span> Create New Sweet Product
+          </h5>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Product Name *</label>
+              <input type="text" id="newProdName" required class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary" placeholder="e.g. Kaju Katli" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Category</label>
+              <select id="newProdCategory" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary">
+                <option value="">Select Category</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Price (₹) *</label>
+              <input type="number" id="newProdPrice" required min="1" step="0.5" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary" placeholder="e.g. 240" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Unit / Weight *</label>
+              <input type="text" id="newProdUnit" required class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary" placeholder="e.g. 250g, 500g, 1kg" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Stock Availability</label>
+              <select id="newProdAvailability" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary">
+                <option value="true">In Stock</option>
+                <option value="false">Out of Stock</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Store Visibility</label>
+              <select id="newProdVisibility" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary">
+                <option value="false">Show Product (Visible to Customers)</option>
+                <option value="true">Hide Product (Hidden from Website)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Product Badge</label>
+              <select id="newProdBadge" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary">
+                <option value="">No Badge</option>
+                <option value="Best Seller">Best Seller</option>
+                <option value="New">New</option>
+                <option value="Signature">Signature</option>
+                <option value="Classic">Classic</option>
+                <option value="Special">Special</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Upload Product Picture (File)</label>
+              <input type="file" id="newProdImageFile" accept="image/*" class="w-full px-3 py-1.5 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-on-surface uppercase mb-1">Description</label>
+            <input type="text" id="newProdDescription" class="w-full px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs focus:outline-none focus:border-primary" placeholder="Delicious artisanal Bengali sweet delicacy..." />
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t border-outline-variant/20">
+            <button type="button" id="cancelAddProductBtn" class="px-4 py-2 text-xs font-semibold text-on-surface-variant hover:text-on-surface">Cancel</button>
+            <button type="submit" id="submitNewProductBtn" class="bg-primary text-on-primary px-5 py-2 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity">Save Product</button>
+          </div>
+        </form>
+
+        <!-- Products Table -->
+        <div class="overflow-x-auto border border-outline-variant/40 rounded-xl">
+          <table class="w-full text-left text-xs text-on-surface">
+            <thead class="bg-surface-container-high text-on-surface font-semibold border-b border-outline-variant/40 uppercase">
+              <tr>
+                <th class="p-3">Product</th>
+                <th class="p-3">Category</th>
+                <th class="p-3">Price (₹)</th>
+                <th class="p-3">Unit / Weight</th>
+                <th class="p-3">Badge</th>
+                <th class="p-3">Stock Availability</th>
+                <th class="p-3">Store Visibility</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminProductsTableBody" class="divide-y divide-outline-variant/20">
+              <tr><td colspan="8" class="p-6 text-center text-on-surface-variant">Loading inventory products...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CUSTOMER MY ORDERS MODAL ================= -->
+  <div id="myOrdersModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-opacity overflow-y-auto">
+    <div class="bg-surface-container-lowest border border-secondary/20 rounded-2xl p-6 md:p-8 max-w-2xl w-full shadow-2xl relative my-8 max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-outline-variant pb-4 mb-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-primary/10 text-primary p-2 rounded-xl">
+            <span class="material-symbols-outlined text-2xl">receipt_long</span>
+          </div>
+          <div>
+            <h3 class="font-headline-sm text-xl text-primary font-bold">My Order History</h3>
+            <p class="text-xs text-on-surface-variant">Your placed sweet orders with Banerjee Sweets</p>
+          </div>
+        </div>
+        <button id="closeMyOrdersModalBtn" class="text-on-surface-variant hover:text-primary transition-colors text-xl font-bold p-1">✕</button>
+      </div>
+      <div class="flex-1 overflow-y-auto space-y-4" id="myOrdersContainer">
+        <div class="p-6 text-center text-on-surface-variant">Loading your orders...</div>
       </div>
     </div>
   </div>

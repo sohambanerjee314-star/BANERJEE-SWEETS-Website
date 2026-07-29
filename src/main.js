@@ -1,31 +1,55 @@
 import { supabase } from './supabase.js';
 import { jsPDF } from 'jspdf';
+import {
+  getProducts,
+  createProduct,
+  updateProduct,
+  toggleProductStock,
+  toggleProductVisibility,
+  toggleProductBadge,
+  deleteProduct,
+  uploadProductImage,
+  uploadAvatarImage,
+  removeAvatarImage,
+  getCategories
+} from './collections.js';
 
 // Configuration Constants
 const TOTAL_FRAMES = 240;
-const FRAME_PATH = '/frames/ezgif-frame-';
+const DESKTOP_FRAME_PATH = '/frames/ezgif-frame-';
+const MOBILE_FRAME_PATH = '/frames-mobile/ezgif-frame-';
 
 // App State
 const state = {
   frames: [],
+  desktopFrames: [],
+  mobileFrames: [],
   loadedFrames: 0,
   currentFrameIndex: 0,
   targetFrameIndex: 0,
   isLoaded: false,
+  isAnimationFrozen: false,
   currentUser: null,
+  currentUserRole: 'Customer',
+  allOrders: [],
+  userOrders: [],
   orderQuantities: {
     rossogolla: 1,
     sandesh: 0,
     mishtidoi: 0
   },
   lastOrderDoc: null,
-  lastOrderId: null
+  lastOrderId: null,
+  isPhoneVerified: false,
+  generatedOtp: null,
+  otpCountdownTimer: null
 };
 
 // Helper: Format frame filename with 3-digit zero padding
-function getFrameUrl(index) {
+function getFrameUrl(index, isMobile = false) {
   const paddedNumber = String(index).padStart(3, '0');
-  return `${FRAME_PATH}${paddedNumber}.jpg`;
+  const basePath = isMobile ? MOBILE_FRAME_PATH : DESKTOP_FRAME_PATH;
+  return `${basePath}${paddedNumber}.jpg`;
 }
 
 // DOM Element References
@@ -51,6 +75,9 @@ const elements = {
   authAlert: document.getElementById('authAlert'),
   userProfileNav: document.getElementById('userProfileNav'),
   userEmailText: document.getElementById('userEmailText'),
+  userRoleBadge: document.getElementById('userRoleBadge'),
+  adminPortalBtn: document.getElementById('adminPortalBtn'),
+  myOrdersBtn: document.getElementById('myOrdersBtn'),
   signOutBtn: document.getElementById('signOutBtn'),
 
   // Password Visibility Toggle Elements
@@ -60,6 +87,44 @@ const elements = {
   toggleSignUpPasswordBtn: document.getElementById('toggleSignUpPasswordBtn'),
   signUpPassword: document.getElementById('signUpPassword'),
   signUpEyeIcon: document.getElementById('signUpEyeIcon'),
+  toggleAdminCodePasswordBtn: document.getElementById('toggleAdminCodePasswordBtn'),
+  signUpAdminCode: document.getElementById('signUpAdminCode'),
+  adminCodeEyeIcon: document.getElementById('adminCodeEyeIcon'),
+
+  // Forgot Password Elements
+  openForgotPassBtn: document.getElementById('openForgotPassBtn'),
+  forgotPasswordForm: document.getElementById('forgotPasswordForm'),
+  forgotPassEmail: document.getElementById('forgotPassEmail'),
+  forgotPassSubmitBtn: document.getElementById('forgotPassSubmitBtn'),
+  backToSignInBtn: document.getElementById('backToSignInBtn'),
+
+  // Reset Password Elements
+  openResetModalBtn: document.getElementById('openResetModalBtn'),
+  resetPasswordModal: document.getElementById('resetPasswordModal'),
+  closeResetModalBtn: document.getElementById('closeResetModalBtn'),
+  resetPasswordForm: document.getElementById('resetPasswordForm'),
+  newResetPassword: document.getElementById('newResetPassword'),
+  confirmResetPassword: document.getElementById('confirmResetPassword'),
+  toggleNewResetPasswordBtn: document.getElementById('toggleNewResetPasswordBtn'),
+  newResetEyeIcon: document.getElementById('newResetEyeIcon'),
+  toggleConfirmResetPasswordBtn: document.getElementById('toggleConfirmResetPasswordBtn'),
+  confirmResetEyeIcon: document.getElementById('confirmResetEyeIcon'),
+  resetPasswordSubmitBtn: document.getElementById('resetPasswordSubmitBtn'),
+  resetAlert: document.getElementById('resetAlert'),
+
+  // Admin Dashboard Elements
+  adminDashboardModal: document.getElementById('adminDashboardModal'),
+  closeAdminModalBtn: document.getElementById('closeAdminModalBtn'),
+  refreshAdminOrdersBtn: document.getElementById('refreshAdminOrdersBtn'),
+  adminOrdersTableBody: document.getElementById('adminOrdersTableBody'),
+  adminTotalOrders: document.getElementById('adminTotalOrders'),
+  adminTotalRevenue: document.getElementById('adminTotalRevenue'),
+  adminPendingOrders: document.getElementById('adminPendingOrders'),
+
+  // Customer My Orders Elements
+  myOrdersModal: document.getElementById('myOrdersModal'),
+  closeMyOrdersModalBtn: document.getElementById('closeMyOrdersModalBtn'),
+  myOrdersContainer: document.getElementById('myOrdersContainer'),
 
   // Order UI Elements
   orderNowNavBtn: document.getElementById('orderNowNavBtn'),
@@ -75,7 +140,8 @@ const elements = {
   itemOrderBtns: document.querySelectorAll('.item-order-btn'),
   orderAlert: document.getElementById('orderAlert'),
   phoneError: document.getElementById('phoneError'),
-  phoneNumberInput: document.getElementById('phoneNumber')
+  phoneNumberInput: document.getElementById('phoneNumber'),
+  mobileMenuToggleBtn: document.getElementById('mobileMenuToggleBtn')
 };
 
 // Initialize Canvas Context
@@ -99,7 +165,9 @@ function resizeCanvas() {
 
 // Render Specific Frame onto Canvas
 function renderFrame(frameIndex) {
-  const img = state.frames[frameIndex];
+  const isMobile = window.innerWidth < 768;
+  const frameArray = isMobile ? state.mobileFrames : state.desktopFrames;
+  const img = frameArray[frameIndex] || state.desktopFrames[frameIndex];
   if (!img || !img.complete) return;
 
   const canvasWidth = elements.canvasContainer.clientWidth;
@@ -107,7 +175,7 @@ function renderFrame(frameIndex) {
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-  const CROP_ZOOM = 1.15;
+  const CROP_ZOOM = isMobile ? 1.0 : 1.15;
   const imgRatio = img.width / img.height;
   const canvasRatio = canvasWidth / canvasHeight;
 
@@ -134,34 +202,35 @@ function renderFrame(frameIndex) {
 function preloadFrames() {
   return new Promise((resolve) => {
     let loadedCount = 0;
+    const totalToLoad = TOTAL_FRAMES * 2;
 
+    const checkComplete = () => {
+      loadedCount++;
+      state.loadedFrames = loadedCount;
+      const percent = Math.floor((loadedCount / totalToLoad) * 100);
+      updatePreloaderUI(percent, loadedCount);
+      if (loadedCount === totalToLoad) {
+        state.isLoaded = true;
+        resolve();
+      }
+    };
+
+    // Load Desktop Frames
     for (let i = 1; i <= TOTAL_FRAMES; i++) {
       const img = new Image();
-      img.src = getFrameUrl(i);
+      img.src = getFrameUrl(i, false);
+      img.onload = checkComplete;
+      img.onerror = checkComplete;
+      state.desktopFrames.push(img);
+    }
 
-      img.onload = () => {
-        loadedCount++;
-        state.loadedFrames = loadedCount;
-        const percent = Math.floor((loadedCount / TOTAL_FRAMES) * 100);
-        updatePreloaderUI(percent, loadedCount);
-        if (loadedCount === TOTAL_FRAMES) {
-          state.isLoaded = true;
-          resolve();
-        }
-      };
-
-      img.onerror = () => {
-        loadedCount++;
-        state.loadedFrames = loadedCount;
-        const percent = Math.floor((loadedCount / TOTAL_FRAMES) * 100);
-        updatePreloaderUI(percent, loadedCount);
-        if (loadedCount === TOTAL_FRAMES) {
-          state.isLoaded = true;
-          resolve();
-        }
-      };
-
-      state.frames.push(img);
+    // Load Mobile Frames (9:16)
+    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+      const img = new Image();
+      img.src = getFrameUrl(i, true);
+      img.onload = checkComplete;
+      img.onerror = checkComplete;
+      state.mobileFrames.push(img);
     }
   });
 }
@@ -177,6 +246,7 @@ function updatePreloaderUI(percent, loadedCount) {
 
 // Scroll Interpolation Sync Engine
 function updateScrollSync() {
+  if (state.isAnimationFrozen) return;
   if (!elements.sequenceSection) return;
 
   const rect = elements.sequenceSection.getBoundingClientRect();
@@ -242,7 +312,7 @@ function setupSmoothNavigation() {
 }
 
 function animationLoop() {
-  if (state.isLoaded) {
+  if (state.isLoaded && !state.isAnimationFrozen) {
     const diff = state.targetFrameIndex - state.currentFrameIndex;
     if (Math.abs(diff) > 0.01) {
       state.currentFrameIndex += diff * 0.25;
@@ -252,34 +322,296 @@ function animationLoop() {
   requestAnimationFrame(animationLoop);
 }
 
+// Automatically Freeze Background Animation & Page Scrolling when any section/modal/drawer is open
+function setupBackgroundFreezeObserver() {
+  const modalIds = [
+    'userProfileModal',
+    'adminDashboardModal',
+    'mobileNavDrawer',
+    'authModal',
+    'myOrdersModal',
+    'resetPasswordModal',
+    'orderModal',
+    'orderSuccessModal'
+  ];
+
+  const checkAndFreeze = () => {
+    const isAnyModalOpen = modalIds.some(id => {
+      const el = document.getElementById(id);
+      return el && !el.classList.contains('hidden');
+    });
+
+    if (isAnyModalOpen) {
+      state.isAnimationFrozen = true;
+      document.body.classList.add('overflow-hidden');
+    } else {
+      state.isAnimationFrozen = false;
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    checkAndFreeze();
+  });
+
+  modalIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+    }
+  });
+
+  // Initial check
+  checkAndFreeze();
+}
+
 // ================= SUPABASE AUTHENTICATION & ORDER ENGINE =================
 
 async function checkAuthSession() {
   const { data: { session } } = await supabase.auth.getSession();
   updateUserUI(session?.user || null);
 
+  if (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token=')) {
+    if (elements.resetPasswordModal) {
+      elements.resetPasswordModal.classList.remove('hidden');
+    }
+  }
+
   supabase.auth.onAuthStateChange((event, session) => {
     updateUserUI(session?.user || null);
+    if (event === 'PASSWORD_RECOVERY') {
+      if (elements.resetPasswordModal) {
+        elements.resetPasswordModal.classList.remove('hidden');
+      }
+    }
   });
 }
 
 function updateUserUI(user) {
   state.currentUser = user;
+  const isMobile = window.innerWidth < 768;
+
   if (user) {
     elements.openAuthModalBtn.classList.add('hidden');
     elements.userProfileNav.classList.remove('hidden');
     elements.userProfileNav.classList.add('flex');
     elements.userEmailText.textContent = user.email;
 
+    const role = user.user_metadata?.role || 'Customer';
+    state.currentUserRole = role;
+
+    if (elements.userRoleBadge) {
+      elements.userRoleBadge.textContent = role;
+      if (role === 'Admin') {
+        elements.userRoleBadge.className = 'hidden md:inline-block text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-400/40';
+        if (elements.adminPortalBtn) {
+          elements.adminPortalBtn.classList.remove('hidden');
+          elements.adminPortalBtn.classList.add('flex');
+        }
+        const pAdminBtn = document.getElementById('profileAdminPortalBtn');
+        if (pAdminBtn) {
+          pAdminBtn.classList.remove('hidden');
+          pAdminBtn.classList.add('flex');
+        }
+
+        // Hide 3 horizontal lines (hamburger button) on mobile for Admin
+        if (elements.mobileMenuToggleBtn) {
+          elements.mobileMenuToggleBtn.classList.add('hidden');
+        }
+
+        // Hide Order History (My Orders) and Order Now sections for Admin
+        if (elements.myOrdersBtn) elements.myOrdersBtn.classList.add('hidden');
+        if (elements.orderNowNavBtn) {
+          elements.orderNowNavBtn.classList.add('hidden');
+          elements.orderNowNavBtn.classList.remove('flex');
+        }
+        const gOrderBtn = document.getElementById('guestOrderNowNavBtn');
+        if (gOrderBtn) {
+          gOrderBtn.classList.add('hidden');
+          gOrderBtn.classList.remove('flex');
+        }
+        const pMyOrdersBtn = document.getElementById('profileMyOrdersBtn');
+        if (pMyOrdersBtn) pMyOrdersBtn.classList.add('hidden');
+        document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.add('hidden'));
+
+      } else {
+        elements.userRoleBadge.className = 'hidden md:inline-block text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/40';
+        if (elements.adminPortalBtn) {
+          elements.adminPortalBtn.classList.add('hidden');
+          elements.adminPortalBtn.classList.remove('flex');
+        }
+        const pAdminBtn = document.getElementById('profileAdminPortalBtn');
+        if (pAdminBtn) {
+          pAdminBtn.classList.add('hidden');
+          pAdminBtn.classList.remove('flex');
+        }
+
+        // Show 3 horizontal lines (hamburger button) on mobile for Customer
+        if (elements.mobileMenuToggleBtn) {
+          elements.mobileMenuToggleBtn.classList.remove('hidden');
+        }
+
+        // Show Order History (My Orders) for Customer (Desktop header only)
+        if (elements.myOrdersBtn) {
+          if (isMobile) {
+            elements.myOrdersBtn.classList.add('hidden');
+            elements.myOrdersBtn.classList.remove('flex');
+          } else {
+            elements.myOrdersBtn.classList.remove('hidden');
+            elements.myOrdersBtn.classList.add('flex');
+          }
+        }
+
+        // Show Order Now button for Customer (Desktop header only, placed right after Profile button)
+        if (elements.orderNowNavBtn) {
+          if (isMobile) {
+            elements.orderNowNavBtn.classList.add('hidden');
+            elements.orderNowNavBtn.classList.remove('flex');
+          } else {
+            elements.orderNowNavBtn.classList.remove('hidden');
+            elements.orderNowNavBtn.classList.add('flex');
+          }
+        }
+
+        const gOrderBtn = document.getElementById('guestOrderNowNavBtn');
+        if (gOrderBtn) {
+          gOrderBtn.classList.add('hidden');
+          gOrderBtn.classList.remove('flex');
+        }
+
+        const pMyOrdersBtn = document.getElementById('profileMyOrdersBtn');
+        if (pMyOrdersBtn) pMyOrdersBtn.classList.remove('hidden');
+        document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.remove('hidden'));
+      }
+    }
+
+    // Update Mobile Nav Drawer User Section
+    const mobileGuestAuthBtn = document.getElementById('mobileGuestAuthBtn');
+    const mobileUserInfo = document.getElementById('mobileUserInfo');
+    const mobileUserEmail = document.getElementById('mobileUserEmail');
+    const mobileUserRole = document.getElementById('mobileUserRole');
+    const mobileSignOutBtn = document.getElementById('mobileSignOutBtn');
+    const mobileMyOrdersBtn = document.getElementById('mobileMyOrdersBtn');
+    const mobileAdminPortalBtn = document.getElementById('mobileAdminPortalBtn');
+
+    if (mobileGuestAuthBtn) mobileGuestAuthBtn.classList.add('hidden');
+    if (mobileUserInfo && mobileUserEmail && mobileUserRole && mobileSignOutBtn) {
+      mobileUserInfo.classList.remove('hidden');
+      mobileSignOutBtn.classList.remove('hidden');
+      mobileUserEmail.textContent = user.email || 'User';
+      mobileUserRole.textContent = role;
+
+      if (role === 'Admin') {
+        if (mobileMyOrdersBtn) mobileMyOrdersBtn.classList.add('hidden');
+        if (mobileAdminPortalBtn) {
+          mobileAdminPortalBtn.classList.remove('hidden');
+          mobileAdminPortalBtn.classList.add('flex');
+        }
+      } else {
+        if (mobileMyOrdersBtn) mobileMyOrdersBtn.classList.remove('hidden');
+        if (mobileAdminPortalBtn) {
+          mobileAdminPortalBtn.classList.add('hidden');
+          mobileAdminPortalBtn.classList.remove('flex');
+        }
+      }
+    }
+
+    // Update User Profile Modal Details & Avatar Images
+    const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
+    const userPhone = user.user_metadata?.phone_number || 'Not provided';
+    const avatarUrl = user.user_metadata?.avatar_url || null;
+
+    const pNameHead = document.getElementById('profileNameHeading');
+    const pNameVal = document.getElementById('profileNameVal');
+    const pEmailVal = document.getElementById('profileEmailVal');
+    const pRoleVal = document.getElementById('profileRoleVal');
+    const pPhoneVal = document.getElementById('profilePhoneVal');
+
+    const headerAvatarImg = document.getElementById('headerUserAvatarImg');
+    const headerAvatarIcon = document.getElementById('headerUserAvatarIcon');
+    const profileAvatarImg = document.getElementById('profileAvatarImg');
+    const profileAvatarIcon = document.getElementById('profileAvatarIcon');
+
+    const removeAvatarBtn = document.getElementById('removeProfileAvatarBtn');
+
+    if (avatarUrl) {
+      if (headerAvatarImg) {
+        headerAvatarImg.src = avatarUrl;
+        headerAvatarImg.classList.remove('hidden');
+      }
+      if (headerAvatarIcon) headerAvatarIcon.classList.add('hidden');
+
+      if (profileAvatarImg) {
+        profileAvatarImg.src = avatarUrl;
+        profileAvatarImg.classList.remove('hidden');
+      }
+      if (profileAvatarIcon) profileAvatarIcon.classList.add('hidden');
+      if (removeAvatarBtn) {
+        removeAvatarBtn.classList.remove('hidden');
+        removeAvatarBtn.classList.add('flex');
+      }
+    } else {
+      if (headerAvatarImg) headerAvatarImg.classList.add('hidden');
+      if (headerAvatarIcon) headerAvatarIcon.classList.remove('hidden');
+
+      if (profileAvatarImg) profileAvatarImg.classList.add('hidden');
+      if (profileAvatarIcon) profileAvatarIcon.classList.remove('hidden');
+      if (removeAvatarBtn) {
+        removeAvatarBtn.classList.add('hidden');
+        removeAvatarBtn.classList.remove('flex');
+      }
+    }
+
+    if (pNameHead) pNameHead.textContent = fullName;
+    if (pNameVal) pNameVal.textContent = fullName;
+    if (pEmailVal) pEmailVal.textContent = user.email || 'N/A';
+    if (pRoleVal) {
+      pRoleVal.textContent = role;
+      pRoleVal.className = role === 'Admin' 
+        ? 'text-xs font-bold text-amber-900 bg-amber-200 border border-amber-400 px-2 py-0.5 rounded-full inline-block uppercase' 
+        : 'text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full inline-block uppercase';
+    }
+    if (pPhoneVal) pPhoneVal.textContent = userPhone;
+
     // Autofill Phone Number in Checkout Form if user registered with mandatory phone
-    const userPhone = user.user_metadata?.phone_number;
-    if (userPhone && document.getElementById('phoneNumber')) {
+    if (userPhone && userPhone !== 'Not provided' && document.getElementById('phoneNumber')) {
       document.getElementById('phoneNumber').value = userPhone;
     }
   } else {
+    state.currentUserRole = 'Customer';
     elements.openAuthModalBtn.classList.remove('hidden');
     elements.userProfileNav.classList.add('hidden');
     elements.userProfileNav.classList.remove('flex');
+    if (elements.adminPortalBtn) {
+      elements.adminPortalBtn.classList.add('hidden');
+      elements.adminPortalBtn.classList.remove('flex');
+    }
+
+    const mobileGuestAuthBtn = document.getElementById('mobileGuestAuthBtn');
+    const mobileUserInfo = document.getElementById('mobileUserInfo');
+    const mobileSignOutBtn = document.getElementById('mobileSignOutBtn');
+
+    if (mobileGuestAuthBtn) mobileGuestAuthBtn.classList.remove('hidden');
+    if (mobileUserInfo) mobileUserInfo.classList.add('hidden');
+    if (mobileSignOutBtn) mobileSignOutBtn.classList.add('hidden');
+
+    // Guests can see Order Now button on desktop, but not My Orders
+    if (elements.myOrdersBtn) elements.myOrdersBtn.classList.add('hidden');
+    if (elements.orderNowNavBtn) {
+      elements.orderNowNavBtn.classList.add('hidden');
+      elements.orderNowNavBtn.classList.remove('flex');
+    }
+    const guestOrderBtn = document.getElementById('guestOrderNowNavBtn');
+    if (guestOrderBtn) {
+      if (isMobile) {
+        guestOrderBtn.classList.add('hidden');
+        guestOrderBtn.classList.remove('flex');
+      } else {
+        guestOrderBtn.classList.remove('hidden');
+        guestOrderBtn.classList.add('flex');
+      }
+    }
+    document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.remove('hidden'));
   }
 }
 
@@ -301,18 +633,6 @@ function isValidPhoneNumber(phone) {
     return false;
   }
 
-  // Check Indian mobile format (10 digits starting 6-9, or 12 digits starting 91 with 6-9, or 11 digits starting 0 with 6-9)
-  if (digitsOnly.length === 10) {
-    return /^[6-9]\d{9}$/.test(digitsOnly);
-  }
-  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
-    return /^[6-9]\d{9}$/.test(digitsOnly.substring(2));
-  }
-  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
-    return /^[6-9]\d{9}$/.test(digitsOnly.substring(1));
-  }
-
-  // General valid international number
   return true;
 }
 
@@ -338,24 +658,65 @@ function hideOrderAlert() {
   }
 }
 
-function showAuthAlert(message, type = 'error') {
-  elements.authAlert.classList.remove('hidden', 'bg-error/15', 'text-error', 'bg-secondary-container/50', 'text-on-secondary-container');
-  if (type === 'error') {
-    elements.authAlert.classList.add('bg-error/15', 'text-error');
-  } else {
-    elements.authAlert.classList.add('bg-secondary-container/50', 'text-on-secondary-container');
+function formatAlertMessage(msg) {
+  if (!msg) return 'An error occurred. Please check your information and try again.';
+  if (typeof msg === 'string') {
+    const trimmed = msg.trim();
+    if (trimmed === '{}' || trimmed === '[object Object]' || trimmed === 'Error' || !trimmed) {
+      return 'Registration request failed. Please verify your details or try a different email address.';
+    }
+    return trimmed;
   }
-  elements.authAlert.textContent = message;
+  if (typeof msg === 'object') {
+    if (msg.message && typeof msg.message === 'string' && msg.message.trim() !== '{}') {
+      return msg.message.trim();
+    }
+    if (msg.error_description && typeof msg.error_description === 'string' && msg.error_description.trim() !== '{}') {
+      return msg.error_description.trim();
+    }
+    if (msg.error && typeof msg.error === 'string' && msg.error.trim() !== '{}') {
+      return msg.error.trim();
+    }
+  }
+  return 'Registration request failed. Please verify your details and try again.';
+}
+
+function showAuthAlert(message, type = 'error') {
+  if (!elements.authAlert) return;
+
+  const displayMessage = formatAlertMessage(message);
+
+  elements.authAlert.className = 'mb-4 p-3.5 rounded-xl text-xs font-medium border flex items-start gap-2.5 transition-all shadow-sm';
+
+  if (type === 'error') {
+    elements.authAlert.classList.add('bg-red-50', 'text-red-900', 'border-red-200');
+    elements.authAlert.innerHTML = `
+      <span class="material-symbols-outlined text-red-600 text-lg flex-shrink-0 select-none">error</span>
+      <div class="flex-1 leading-snug font-semibold">${displayMessage}</div>
+    `;
+  } else {
+    elements.authAlert.classList.add('bg-emerald-50', 'text-emerald-900', 'border-emerald-200');
+    elements.authAlert.innerHTML = `
+      <span class="material-symbols-outlined text-emerald-600 text-lg flex-shrink-0 select-none">check_circle</span>
+      <div class="flex-1 leading-snug font-semibold">${displayMessage}</div>
+    `;
+  }
+
+  elements.authAlert.classList.remove('hidden');
+  elements.authAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function hideAuthAlert() {
-  elements.authAlert.classList.add('hidden');
+  if (elements.authAlert) {
+    elements.authAlert.classList.add('hidden');
+    elements.authAlert.innerHTML = '';
+  }
 }
 
 // Handle Sign In (Email & Password only)
 async function handleSignIn(e) {
   e.preventDefault();
-  const email = document.getElementById('signInEmail').value;
+  const email = document.getElementById('signInEmail').value.trim();
   const password = document.getElementById('signInPassword').value;
   const submitBtn = document.getElementById('signInSubmitBtn');
 
@@ -371,6 +732,13 @@ async function handleSignIn(e) {
   if (error) {
     showAuthAlert(error.message, 'error');
   } else {
+    // If owner email or registered as admin, ensure role is set to Admin
+    if (data?.user && (email.toLowerCase() === 'sohambanerjee314@gmail.com' || data.user.user_metadata?.role === 'Admin')) {
+      if (data.user.user_metadata?.role !== 'Admin') {
+        await supabase.auth.updateUser({ data: { role: 'Admin' } });
+      }
+      state.currentUserRole = 'Admin';
+    }
     showAuthAlert('Successfully signed in!', 'success');
     setTimeout(() => {
       elements.authModal.classList.add('hidden');
@@ -382,13 +750,24 @@ async function handleSignIn(e) {
 // Handle Sign Up (Name, Email, MANDATORY Phone, Password)
 async function handleSignUp(e) {
   e.preventDefault();
-  const name = document.getElementById('signUpName').value;
-  const email = document.getElementById('signUpEmail').value;
-  const phone = document.getElementById('signUpPhone').value;
+  const name = document.getElementById('signUpName').value.trim();
+  const email = document.getElementById('signUpEmail').value.trim();
+  const phone = document.getElementById('signUpPhone').value.trim();
   const password = document.getElementById('signUpPassword').value;
   const submitBtn = document.getElementById('signUpSubmitBtn');
+  const adminCodeInput = document.getElementById('signUpAdminCode');
 
-  if (!phone || phone.trim() === '') {
+  if (!name) {
+    showAuthAlert('Please enter your full name.', 'error');
+    return;
+  }
+
+  if (!email) {
+    showAuthAlert('Please enter a valid email address.', 'error');
+    return;
+  }
+
+  if (!phone) {
     showAuthAlert('Phone Number is mandatory for registration!', 'error');
     return;
   }
@@ -398,33 +777,710 @@ async function handleSignUp(e) {
     return;
   }
 
+  if (!password || password.length < 6) {
+    showAuthAlert('Password must be at least 6 characters long.', 'error');
+    return;
+  }
+
+  // Automatic Admin role for owner email or valid Admin Security Passcode
+  let role = 'Customer';
+  if (email.toLowerCase() === 'sohambanerjee314@gmail.com') {
+    role = 'Admin';
+  } else if (adminCodeInput && adminCodeInput.value.trim() !== '') {
+    const code = adminCodeInput.value.trim();
+    if (code === 'SOHAM2004') {
+      role = 'Admin';
+    } else {
+      showAuthAlert('Invalid Admin Passcode! Public registration is restricted to Customer accounts.', 'error');
+      return;
+    }
+  }
+
   submitBtn.disabled = true;
   submitBtn.textContent = 'Creating account...';
   hideAuthAlert();
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: name,
-        phone_number: phone
+  try {
+    let signUpSuccess = false;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+          phone_number: phone,
+          role: role
+        }
+      }
+    });
+
+    if (!error && data?.user && data.user.identities && data.user.identities.length > 0) {
+      signUpSuccess = true;
+    }
+
+    // Fallback to direct DB registration if standard auth.signUp failed (e.g. due to broken custom SMTP server)
+    if (!signUpSuccess) {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('register_user_direct', {
+        p_email: email,
+        p_password: password,
+        p_full_name: name,
+        p_phone_number: phone,
+        p_role: role
+      });
+
+      if (rpcErr) {
+        console.error('Direct Registration RPC Error:', rpcErr);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Account';
+        showAuthAlert(rpcErr.message || error?.message || 'Registration failed. Please check your details.', 'error');
+        return;
       }
     }
-  });
 
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Create Account';
+    // Authenticate user session immediately
+    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    showAuthAlert(error.message, 'error');
-  } else {
-    showAuthAlert('Account created successfully! You are now logged in.', 'success');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create Account';
+
+    if (signInErr) {
+      showAuthAlert(`Account created as ${role}! Please switch to "Sign In" with your password.`, 'success');
+    } else {
+      showAuthAlert(`Account created successfully as ${role}! You are now logged in.`, 'success');
+    }
+
     setTimeout(() => {
       elements.authModal.classList.add('hidden');
       hideAuthAlert();
     }, 800);
+
+  } catch (err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create Account';
+    console.error('Sign Up Exception:', err);
+    showAuthAlert(err.message || 'An unexpected error occurred during registration.', 'error');
   }
+}
+
+// Handle Forgot Password
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const email = elements.forgotPassEmail.value;
+  const submitBtn = elements.forgotPassSubmitBtn;
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Sending link...';
+  hideAuthAlert();
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}#reset-password`
+  });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Send Reset Link';
+
+  if (error) {
+    showAuthAlert(error.message, 'error');
+  } else {
+    showAuthAlert('Password reset email sent! Please check your inbox/spam folder.', 'success');
+  }
+}
+
+// Handle Reset Password
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const newPass = elements.newResetPassword.value;
+  const confirmPass = elements.confirmResetPassword.value;
+  const submitBtn = elements.resetPasswordSubmitBtn;
+
+  if (newPass !== confirmPass) {
+    showResetAlert('Passwords do not match!', 'error');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Updating...';
+  hideResetAlert();
+
+  const { error } = await supabase.auth.updateUser({ password: newPass });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Update Password';
+
+  if (error) {
+    showResetAlert(error.message, 'error');
+  } else {
+    showResetAlert('Password updated successfully!', 'success');
+    setTimeout(() => {
+      elements.resetPasswordModal.classList.add('hidden');
+      openAuthModal('Password updated successfully! Please sign in with your new password.');
+    }, 1200);
+  }
+}
+
+function showResetAlert(message, type = 'error') {
+  if (!elements.resetAlert) return;
+
+  elements.resetAlert.className = 'mb-4 p-3.5 rounded-xl text-xs font-medium border flex items-start gap-2.5 transition-all shadow-sm';
+
+  if (type === 'error') {
+    elements.resetAlert.classList.add('bg-red-50', 'text-red-900', 'border-red-200');
+    elements.resetAlert.innerHTML = `
+      <span class="material-symbols-outlined text-red-600 text-lg flex-shrink-0 select-none">error</span>
+      <div class="flex-1 leading-snug font-semibold">${message}</div>
+    `;
+  } else {
+    elements.resetAlert.classList.add('bg-emerald-50', 'text-emerald-900', 'border-emerald-200');
+    elements.resetAlert.innerHTML = `
+      <span class="material-symbols-outlined text-emerald-600 text-lg flex-shrink-0 select-none">check_circle</span>
+      <div class="flex-1 leading-snug font-semibold">${message}</div>
+    `;
+  }
+
+  elements.resetAlert.classList.remove('hidden');
+  elements.resetAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideResetAlert() {
+  if (elements.resetAlert) {
+    elements.resetAlert.classList.add('hidden');
+    elements.resetAlert.innerHTML = '';
+  }
+}
+
+// ================= ADMIN DASHBOARD & ORDERS ENGINE =================
+
+async function loadAdminDashboard() {
+  if (state.currentUserRole !== 'Admin') {
+    alert('Access Denied: Admin privileges required.');
+    return;
+  }
+
+  elements.adminOrdersTableBody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">Fetching latest orders...</td></tr>';
+  elements.adminDashboardModal.classList.remove('hidden');
+
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching admin orders:', error);
+    elements.adminOrdersTableBody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-error">Failed to load orders: ${error.message}</td></tr>`;
+    return;
+  }
+
+  state.allOrders = orders || [];
+  renderAdminOrders();
+}
+
+function renderAdminOrders() {
+  const orders = state.allOrders;
+  elements.adminTotalOrders.textContent = orders.length;
+
+  const totalRev = orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  elements.adminTotalRevenue.textContent = `₹${totalRev}`;
+
+  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status).length;
+  elements.adminPendingOrders.textContent = pendingCount;
+
+  if (orders.length === 0) {
+    elements.adminOrdersTableBody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">No orders found in database.</td></tr>';
+    return;
+  }
+
+  elements.adminOrdersTableBody.innerHTML = orders.map(order => {
+    const itemsSummary = Array.isArray(order.items) 
+      ? order.items.map(i => `${i.qty}x ${i.name}`).join(', ')
+      : 'Items';
+    
+    const status = (order.status || 'pending').toLowerCase();
+    let statusClass = 'bg-amber-100 text-amber-900 border-amber-300';
+    if (status === 'confirmed') statusClass = 'bg-blue-100 text-blue-900 border-blue-300';
+    if (status === 'processing') statusClass = 'bg-purple-100 text-purple-900 border-purple-300';
+    if (status === 'out_for_delivery') statusClass = 'bg-indigo-100 text-indigo-900 border-indigo-300';
+    if (status === 'completed' || status === 'delivered' || status === 'successful') statusClass = 'bg-emerald-100 text-emerald-900 border-emerald-300';
+    if (status === 'cancelled') statusClass = 'bg-red-100 text-red-900 border-red-300';
+
+    const displayStatus = status.replace(/_/g, ' ');
+
+    return `
+      <tr class="hover:bg-surface-container/50 border-b border-outline-variant/20">
+        <td class="p-3 font-bold text-primary">${order.order_id || '#'}</td>
+        <td class="p-3 truncate max-w-[150px]">${order.user_email || 'Guest'}</td>
+        <td class="p-3 font-mono">${order.phone_number || 'N/A'}</td>
+        <td class="p-3 max-w-[200px] truncate" title="${itemsSummary}">${itemsSummary}</td>
+        <td class="p-3 font-bold text-secondary">₹${order.total_amount || 0}</td>
+        <td class="p-3">
+          <span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full border uppercase ${statusClass}">
+            ${displayStatus}
+          </span>
+        </td>
+        <td class="p-3">
+          <select class="admin-status-select bg-surface border border-outline-variant rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:border-primary" data-order-id="${order.order_id}">
+            <option value="pending" ${status === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="confirmed" ${status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+            <option value="processing" ${status === 'processing' ? 'selected' : ''}>Processing</option>
+            <option value="out_for_delivery" ${status === 'out_for_delivery' ? 'selected' : ''}>Out for Delivery</option>
+            <option value="completed" ${status === 'completed' || status === 'delivered' || status === 'successful' ? 'selected' : ''}>Successful / Delivered</option>
+            <option value="cancelled" ${status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+          </select>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.admin-status-select').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      const orderId = e.target.dataset.orderId;
+      const newStatus = e.target.value;
+      await updateOrderStatus(orderId, newStatus);
+    });
+  });
+}
+
+async function updateOrderStatus(orderId, newStatus) {
+  const { error } = await supabase
+    .from('orders')
+    .update({ status: newStatus })
+    .eq('order_id', orderId);
+
+  if (error) {
+    alert(`Failed to update order status: ${error.message}`);
+  } else {
+    const order = state.allOrders.find(o => o.order_id === orderId);
+    if (order) order.status = newStatus;
+    renderAdminOrders();
+  }
+}
+
+// ================= ADMIN PRODUCT INVENTORY & STOCK CONTROLS =================
+
+async function loadAdminProductsTable() {
+  const tbody = document.getElementById('adminProductsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-on-surface-variant">Fetching inventory products...</td></tr>';
+
+  const [products, categories] = await Promise.all([
+    getProducts(false),
+    getCategories()
+  ]);
+
+  state.allProducts = products || [];
+  state.categoriesList = categories || [];
+
+  // Populate categories dropdown in Add Product form
+  const catSelect = document.getElementById('newProdCategory');
+  if (catSelect && categories) {
+    catSelect.innerHTML = '<option value="">Select Category</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+
+  renderAdminProductsTable();
+}
+
+function renderAdminProductsTable() {
+  const tbody = document.getElementById('adminProductsTableBody');
+  if (!tbody) return;
+
+  const products = state.allProducts;
+  const categories = state.categoriesList || [];
+
+  if (!products || products.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">No products found in inventory. Click "Add New Product" to create one.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = products.map(prod => {
+    const isAvail = prod.is_available !== false;
+    const isHidden = prod.is_hidden === true;
+    const currentCatId = prod.category_id || '';
+    const imgUrl = prod.image_url || 'https://lh3.googleusercontent.com/aida-public/AB6AXuDSgXSbgG4O-vHwX2nnPLQQNJUjy19q7na2Ru1L8kMiNLQuIKupiWlPusxh0J_re16_QNi6jDS9HaW2gsVYnY5PKHxgtCKTx4-srHUe1BHE7_09Jolu-hFbDT90K0tqrEAfZRpwATZ2UqBKIaZ4lj4rYvTvHKR7BCk8Yvk_hxu1ThNUZlOulICL6hkVWC0JtTv5S2kreKzBb6cLLhYibw8H8lbcUBKBR4zDXbf7ByAM6xB2k3pi3knW';
+
+    const categoryOptionsHtml = '<option value="">Uncategorized</option>' + categories.map(c => `
+      <option value="${c.id}" ${c.id === currentCatId ? 'selected' : ''}>${c.name}</option>
+    `).join('');
+
+    return `
+      <tr class="hover:bg-surface-container/50 border-b border-outline-variant/20" data-prod-id="${prod.id}">
+        <td class="p-3">
+          <div class="flex items-start gap-2.5">
+            <div class="flex flex-col items-center flex-shrink-0">
+              <img src="${imgUrl}" alt="${prod.name}" class="w-10 h-10 rounded-lg object-cover border border-outline-variant/40 mt-1 admin-prod-img-preview" />
+              <label class="cursor-pointer bg-surface-container px-1.5 py-0.5 rounded text-[9px] font-bold text-primary border border-outline-variant/60 hover:bg-surface-container-high transition-all inline-flex items-center gap-0.5 mt-1 shadow-2xs" title="Upload downloaded image file from your device">
+                <span class="material-symbols-outlined text-[11px]">upload_file</span>
+                <span>Upload</span>
+                <input type="file" accept="image/*" class="admin-prod-file-upload hidden" data-prod-id="${prod.id}" />
+              </label>
+            </div>
+            <div class="space-y-1 w-full min-w-[150px]">
+              <input type="text" value="${prod.name}" class="admin-prod-name w-full px-2 py-1 border border-outline-variant rounded bg-surface text-xs font-bold text-primary focus:outline-none focus:border-primary" placeholder="Product Name" data-prod-id="${prod.id}" />
+              <input type="text" value="${prod.description || ''}" class="admin-prod-desc w-full px-2 py-1 border border-outline-variant/60 rounded bg-surface text-[10px] text-on-surface-variant focus:outline-none focus:border-primary" placeholder="Short description..." data-prod-id="${prod.id}" />
+              <input type="url" value="${prod.image_url || ''}" class="admin-prod-img w-full px-2 py-0.5 border border-outline-variant/60 rounded bg-surface text-[10px] text-on-surface-variant focus:outline-none focus:border-primary font-mono" placeholder="Image URL (https://...)" data-prod-id="${prod.id}" />
+            </div>
+          </div>
+        </td>
+        <td class="p-3">
+          <select class="admin-prod-category px-2 py-1 border border-outline-variant rounded bg-surface text-xs font-medium focus:outline-none focus:border-primary" data-prod-id="${prod.id}">
+            ${categoryOptionsHtml}
+          </select>
+        </td>
+        <td class="p-3">
+          <input type="number" step="0.5" value="${prod.price}" class="admin-prod-price w-20 px-2 py-1 border border-outline-variant rounded bg-surface text-xs font-bold text-secondary focus:outline-none focus:border-primary" data-prod-id="${prod.id}" />
+        </td>
+        <td class="p-3">
+          <input type="text" value="${prod.unit || '250g'}" class="admin-prod-unit w-20 px-2 py-1 border border-outline-variant rounded bg-surface text-xs focus:outline-none focus:border-primary" data-prod-id="${prod.id}" />
+        </td>
+        <td class="p-3">
+          <select class="admin-prod-badge px-2 py-1 border border-outline-variant rounded bg-surface text-xs font-semibold focus:outline-none focus:border-primary" data-prod-id="${prod.id}">
+            <option value="" ${!prod.badge ? 'selected' : ''}>None</option>
+            <option value="Best Seller" ${prod.badge === 'Best Seller' ? 'selected' : ''}>Best Seller</option>
+            <option value="New" ${prod.badge === 'New' ? 'selected' : ''}>New</option>
+            <option value="Signature" ${prod.badge === 'Signature' ? 'selected' : ''}>Signature</option>
+            <option value="Classic" ${prod.badge === 'Classic' ? 'selected' : ''}>Classic</option>
+            <option value="Special" ${prod.badge === 'Special' ? 'selected' : ''}>Special</option>
+          </select>
+        </td>
+        <td class="p-3">
+          <select class="admin-prod-stock px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase transition-all ${isAvail ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-red-100 text-red-900 border-red-300'}" data-prod-id="${prod.id}">
+            <option value="true" ${isAvail ? 'selected' : ''}>In Stock</option>
+            <option value="false" ${!isAvail ? 'selected' : ''}>Out of Stock</option>
+          </select>
+        </td>
+        <td class="p-3">
+          <select class="admin-prod-visibility px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase transition-all ${!isHidden ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-slate-200 text-slate-700 border-slate-400'}" data-prod-id="${prod.id}">
+            <option value="false" ${!isHidden ? 'selected' : ''}>Show Product</option>
+            <option value="true" ${isHidden ? 'selected' : ''}>Hide Product</option>
+          </select>
+        </td>
+        <td class="p-3 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button class="admin-save-prod-btn px-2.5 py-1 bg-primary text-on-primary rounded text-xs font-bold hover:opacity-90 transition-all flex items-center gap-1 shadow-sm" data-prod-id="${prod.id}" title="Save All Product Changes">
+              <span class="material-symbols-outlined text-sm">save</span>
+              <span class="hidden sm:inline">Save</span>
+            </button>
+            <button class="admin-delete-prod-btn p-1.5 text-xs text-error hover:bg-error/10 rounded-md transition-colors" data-prod-id="${prod.id}" title="Delete Product">
+              <span class="material-symbols-outlined text-sm">delete</span>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Attach event listeners for Direct Image File Uploads
+  document.querySelectorAll('.admin-prod-file-upload').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const prodId = e.target.dataset.prodId;
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const row = document.querySelector(`tr[data-prod-id="${prodId}"]`);
+        if (row) {
+          const imgPreview = row.querySelector('.admin-prod-img-preview');
+          if (imgPreview) imgPreview.style.opacity = '0.5';
+        }
+
+        const publicUrl = await uploadProductImage(file);
+        await updateProduct(prodId, { image_url: publicUrl });
+
+        const prod = state.allProducts.find(p => p.id === prodId);
+        if (prod) prod.image_url = publicUrl;
+
+        alert('Product picture uploaded and updated successfully!');
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to upload product picture: ${err.message}`);
+      }
+    });
+  });
+
+  // Attach event listeners for Save buttons
+  document.querySelectorAll('.admin-save-prod-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const prodId = e.currentTarget.dataset.prodId;
+      const row = document.querySelector(`tr[data-prod-id="${prodId}"]`);
+      if (!row) return;
+
+      const nameInput = row.querySelector('.admin-prod-name');
+      const descInput = row.querySelector('.admin-prod-desc');
+      const imgInput = row.querySelector('.admin-prod-img');
+      const catSelect = row.querySelector('.admin-prod-category');
+      const priceInput = row.querySelector('.admin-prod-price');
+      const unitInput = row.querySelector('.admin-prod-unit');
+      const badgeSelect = row.querySelector('.admin-prod-badge');
+      const stockSelect = row.querySelector('.admin-prod-stock');
+      const visSelect = row.querySelector('.admin-prod-visibility');
+
+      const newName = nameInput.value.trim();
+      const newDesc = descInput.value.trim();
+      const newImgUrl = imgInput ? imgInput.value.trim() : null;
+      const newCatId = catSelect.value || null;
+      const newPrice = parseFloat(priceInput.value);
+      const newUnit = unitInput.value.trim();
+      const newBadge = badgeSelect ? (badgeSelect.value || null) : null;
+      const newAvail = stockSelect.value === 'true';
+      const newHidden = visSelect.value === 'true';
+
+      if (!newName || isNaN(newPrice) || !newUnit) {
+        alert('Please fill in valid Product Name, Price, and Unit Weight.');
+        return;
+      }
+
+      try {
+        await updateProduct(prodId, {
+          name: newName,
+          description: newDesc,
+          image_url: newImgUrl || null,
+          category_id: newCatId,
+          price: newPrice,
+          unit: newUnit,
+          badge: newBadge,
+          is_available: newAvail,
+          is_hidden: newHidden
+        });
+
+        const prod = state.allProducts.find(p => p.id === prodId);
+        if (prod) {
+          prod.name = newName;
+          prod.description = newDesc;
+          prod.image_url = newImgUrl || null;
+          prod.category_id = newCatId;
+          prod.price = newPrice;
+          prod.unit = newUnit;
+          prod.badge = newBadge;
+          prod.is_available = newAvail;
+          prod.is_hidden = newHidden;
+        }
+
+        alert(`Product "${newName}" updated successfully!`);
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to update product: ${err.message}`);
+      }
+    });
+  });
+
+  // Attach event listeners for Badge dropdown changes
+  document.querySelectorAll('.admin-prod-badge').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      const prodId = e.target.dataset.prodId;
+      const newBadge = e.target.value || null;
+      try {
+        await toggleProductBadge(prodId, newBadge);
+        const prod = state.allProducts.find(p => p.id === prodId);
+        if (prod) prod.badge = newBadge;
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to update badge: ${err.message}`);
+      }
+    });
+  });
+
+  // Attach event listeners for Stock toggles
+  document.querySelectorAll('.admin-prod-stock').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      const prodId = e.target.dataset.prodId;
+      const newAvail = e.target.value === 'true';
+      try {
+        await toggleProductStock(prodId, newAvail);
+        const prod = state.allProducts.find(p => p.id === prodId);
+        if (prod) prod.is_available = newAvail;
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to update stock status: ${err.message}`);
+      }
+    });
+  });
+
+  // Attach event listeners for Storefront Visibility toggles (Show Product vs Hide Product)
+  document.querySelectorAll('.admin-prod-visibility').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      const prodId = e.target.dataset.prodId;
+      const newHidden = e.target.value === 'true';
+      try {
+        await toggleProductVisibility(prodId, newHidden);
+        const prod = state.allProducts.find(p => p.id === prodId);
+        if (prod) prod.is_hidden = newHidden;
+        alert(newHidden ? 'Product is now HIDDEN from the customer website.' : 'Product is now VISIBLE on the customer website.');
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to update product visibility: ${err.message}`);
+      }
+    });
+  });
+
+  // Attach event listeners for Delete buttons
+  document.querySelectorAll('.admin-delete-prod-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const prodId = e.currentTarget.dataset.prodId;
+      if (!confirm('Are you sure you want to delete this product from inventory?')) return;
+
+      try {
+        await deleteProduct(prodId);
+        state.allProducts = state.allProducts.filter(p => p.id !== prodId);
+        renderAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        alert(`Failed to delete product: ${err.message}`);
+      }
+    });
+  });
+}
+
+// Render products dynamically on Customer interface (HIDDEN PRODUCTS NEVER APPEAR)
+async function renderCustomerProductsGrid() {
+  const container = document.getElementById('signatureProductsGrid');
+  if (!container) return;
+
+  const products = await getProducts(false, true);
+  state.allProducts = products || [];
+
+  // Filter out products marked as hidden by Admin
+  const visibleProducts = (products || []).filter(p => p.is_hidden !== true);
+
+  if (visibleProducts.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full p-12 text-center text-on-surface-variant bg-surface-container/50 rounded-2xl border border-outline-variant/30">
+        <span class="material-symbols-outlined text-4xl text-outline-variant mb-2">storefront</span>
+        <p class="font-bold text-on-surface">No Products Available</p>
+        <p class="text-xs mt-1">Our chefs are preparing fresh sweets. Please check back shortly!</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = visibleProducts.map(prod => {
+    const isAvail = prod.is_available !== false;
+    const imgUrl = prod.image_url || 'https://lh3.googleusercontent.com/aida-public/AB6AXuDSgXSbgG4O-vHwX2nnPLQQNJUjy19q7na2Ru1L8kMiNLQuIKupiWlPusxh0J_re16_QNi6jDS9HaW2gsVYnY5PKHxgtCKTx4-srHUe1BHE7_09Jolu-hFbDT90K0tqrEAfZRpwATZ2UqBKIaZ4lj4rYvTvHKR7BCk8Yvk_hxu1ThNUZlOulICL6hkVWC0JtTv5S2kreKzBb6cLLhYibw8H8lbcUBKBR4zDXbf7ByAM6xB2k3pi3knW';
+    const hideOrderBtn = state.currentUserRole === 'Admin';
+    const badgeText = prod.badge || null;
+
+    let badgeClass = 'bg-secondary-container/90 text-on-secondary-container';
+    if (badgeText === 'Best Seller') badgeClass = 'bg-amber-500 text-white font-bold shadow-sm';
+    if (badgeText === 'New') badgeClass = 'bg-emerald-600 text-white font-bold shadow-sm';
+    if (badgeText === 'Signature') badgeClass = 'bg-purple-600 text-white font-bold shadow-sm';
+    if (badgeText === 'Classic') badgeClass = 'bg-blue-600 text-white font-bold shadow-sm';
+    if (badgeText === 'Special') badgeClass = 'bg-rose-600 text-white font-bold shadow-sm';
+
+    return `
+      <div class="group bg-surface-container-lowest rounded-xl overflow-hidden card-shadow transition-all hover:-translate-y-2 flex flex-col justify-between border border-outline-variant/30">
+        <div>
+          <div class="h-64 overflow-hidden relative">
+            <img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ${!isAvail ? 'grayscale opacity-75' : ''}" data-alt="${prod.name}" src="${imgUrl}"/>
+            ${!isAvail 
+              ? `<div class="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-widest shadow-md z-10">Out of Stock</div>`
+              : (badgeText ? `<div class="absolute top-4 right-4 ${badgeClass} px-3 py-1 rounded-full font-label-lg text-xs uppercase tracking-wider z-10">${badgeText}</div>` : '')
+            }
+          </div>
+          <div class="p-lg text-center">
+            <h3 class="font-headline-sm text-headline-sm text-primary mb-xs font-bold">${prod.name}</h3>
+            <p class="font-body-md text-body-md text-on-surface-variant mb-md text-xs line-clamp-2">${prod.description || ''}</p>
+            <span class="font-headline-sm text-secondary block mb-4 font-bold text-lg">₹${prod.price} <small class="font-label-lg text-on-surface-variant text-xs">/ ${prod.unit || '250g'}</small></span>
+          </div>
+        </div>
+        <div class="px-lg pb-lg">
+          ${!isAvail
+            ? `<button disabled class="w-full bg-slate-200 text-slate-500 py-3 rounded-full font-label-lg uppercase tracking-wider cursor-not-allowed opacity-70 flex items-center justify-center gap-2 border border-slate-300">
+                <span class="material-symbols-outlined text-sm">block</span>
+                <span>Out of Stock</span>
+              </button>`
+            : `<button class="item-order-btn ${hideOrderBtn ? 'hidden' : ''} w-full bg-primary text-on-primary py-3 rounded-full font-label-lg uppercase tracking-wider hover:bg-primary-container transition-colors flex items-center justify-center gap-2 shadow-sm" data-item-id="${prod.id}" data-item-name="${prod.name}" data-item-price="${prod.price}">
+                <span class="material-symbols-outlined text-sm">shopping_cart</span>
+                <span>Order ${prod.name}</span>
+              </button>`
+          }
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Re-attach order event listeners to new dynamic buttons
+  document.querySelectorAll('.item-order-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const itemId = e.currentTarget.dataset.itemId;
+      triggerOrderFlow(itemId);
+    });
+  });
+}
+
+// ================= CUSTOMER MY ORDERS ENGINE =================
+
+async function loadMyOrders() {
+  if (!state.currentUser) {
+    openAuthModal('Please sign in to view your orders.');
+    return;
+  }
+
+  elements.myOrdersContainer.innerHTML = '<div class="p-6 text-center text-on-surface-variant">Loading your order history...</div>';
+  elements.myOrdersModal.classList.remove('hidden');
+
+  const userEmail = state.currentUser.email ? state.currentUser.email.toLowerCase() : '';
+  const userId = state.currentUser.id;
+
+  let query = supabase.from('orders').select('*');
+  if (userId && userEmail) {
+    query = query.or(`user_id.eq.${userId},user_email.ilike.${userEmail}`);
+  } else if (userEmail) {
+    query = query.ilike('user_email', userEmail);
+  }
+
+  const { data: orders, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching customer orders:', error);
+    elements.myOrdersContainer.innerHTML = `<div class="p-6 text-center text-error font-medium">Failed to load orders: ${error.message}</div>`;
+    return;
+  }
+
+  if (!orders || orders.length === 0) {
+    elements.myOrdersContainer.innerHTML = `
+      <div class="p-8 text-center text-on-surface-variant">
+        <span class="material-symbols-outlined text-4xl text-outline-variant mb-2">shopping_bag</span>
+        <p class="font-bold text-on-surface">No Orders Found</p>
+        <p class="text-xs mt-1">You haven't placed any sweet orders with ${state.currentUser.email} yet!</p>
+      </div>
+    `;
+    return;
+  }
+
+  elements.myOrdersContainer.innerHTML = orders.map(order => {
+    const itemsHtml = Array.isArray(order.items)
+      ? order.items.map(i => `<div class="flex justify-between text-xs py-0.5"><span>${i.qty}x ${i.name}</span><span class="font-semibold">₹${i.qty * i.price}</span></div>`).join('')
+      : '<div class="text-xs text-on-surface-variant">Order details</div>';
+
+    const status = order.status || 'pending';
+    let statusClass = 'bg-amber-100 text-amber-800 border-amber-300';
+    if (status === 'completed') statusClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+    if (status === 'cancelled') statusClass = 'bg-red-100 text-red-800 border-red-300';
+
+    return `
+      <div class="bg-surface-container p-4 rounded-xl border border-outline-variant/40 space-y-3 shadow-sm">
+        <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+          <div>
+            <span class="font-bold text-primary text-sm">${order.order_id || order.id || '#'}</span>
+            <span class="text-[10px] text-on-surface-variant block">${new Date(order.created_at).toLocaleString()}</span>
+          </div>
+          <span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full border uppercase ${statusClass}">
+            ${status}
+          </span>
+        </div>
+        <div class="space-y-1 bg-white/60 p-2.5 rounded-lg border border-outline-variant/20">
+          ${itemsHtml}
+        </div>
+        <div class="flex justify-between items-center border-t border-outline-variant/20 pt-2 font-bold text-xs">
+          <span>Total Amount Paid:</span>
+          <span class="text-secondary text-sm">₹${order.total_amount}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 async function handleSignOut() {
@@ -436,6 +1492,13 @@ function openAuthModal(promptMessage = null) {
     showAuthAlert(promptMessage, 'error');
   } else {
     hideAuthAlert();
+  }
+  // Reset tabs to sign in
+  if (elements.signInForm && elements.signUpForm && elements.forgotPasswordForm) {
+    elements.signInForm.classList.remove('hidden');
+    elements.signUpForm.classList.add('hidden');
+    elements.forgotPasswordForm.classList.add('hidden');
+    if (elements.authTabs) elements.authTabs.classList.remove('hidden');
   }
   elements.authModal.classList.remove('hidden');
 }
@@ -454,6 +1517,30 @@ function setupPasswordToggles() {
       const isPassword = elements.signUpPassword.type === 'password';
       elements.signUpPassword.type = isPassword ? 'text' : 'password';
       elements.signUpEyeIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
+    });
+  }
+
+  if (elements.toggleNewResetPasswordBtn && elements.newResetPassword && elements.newResetEyeIcon) {
+    elements.toggleNewResetPasswordBtn.addEventListener('click', () => {
+      const isPassword = elements.newResetPassword.type === 'password';
+      elements.newResetPassword.type = isPassword ? 'text' : 'password';
+      elements.newResetEyeIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
+    });
+  }
+
+  if (elements.toggleConfirmResetPasswordBtn && elements.confirmResetPassword && elements.confirmResetEyeIcon) {
+    elements.toggleConfirmResetPasswordBtn.addEventListener('click', () => {
+      const isPassword = elements.confirmResetPassword.type === 'password';
+      elements.confirmResetPassword.type = isPassword ? 'text' : 'password';
+      elements.confirmResetEyeIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
+    });
+  }
+
+  if (elements.toggleAdminCodePasswordBtn && elements.signUpAdminCode && elements.adminCodeEyeIcon) {
+    elements.toggleAdminCodePasswordBtn.addEventListener('click', () => {
+      const isPassword = elements.signUpAdminCode.type === 'password';
+      elements.signUpAdminCode.type = isPassword ? 'text' : 'password';
+      elements.adminCodeEyeIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
     });
   }
 }
@@ -567,6 +1654,114 @@ function buildOrderPDF(orderPayload) {
   return doc;
 }
 
+// Mobile Phone OTP Verification Helper Functions for Checkout
+function sendCheckoutOtp() {
+  const phone = document.getElementById('phoneNumber')?.value;
+  const phoneErr = document.getElementById('phoneError');
+  const phoneInput = document.getElementById('phoneNumber');
+  const otpContainer = document.getElementById('otpContainer');
+  const otpNoticeText = document.getElementById('otpNoticeText');
+  const otpErrorText = document.getElementById('otpErrorText');
+  const otpSuccessBadge = document.getElementById('otpSuccessBadge');
+  const otpTimerText = document.getElementById('otpTimerText');
+  const sendOtpBtn = document.getElementById('sendOtpBtn');
+  const triggerOtpBtn = document.getElementById('triggerOtpBtn');
+
+  if (phoneErr) phoneErr.classList.add('hidden');
+  if (otpErrorText) otpErrorText.classList.add('hidden');
+
+  if (!phone || !phone.trim()) {
+    if (phoneErr) {
+      phoneErr.textContent = 'Please enter a mobile phone number to receive OTP.';
+      phoneErr.classList.remove('hidden');
+    }
+    if (phoneInput) phoneInput.focus();
+    return false;
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    if (phoneErr) {
+      phoneErr.textContent = 'Please enter a valid 10-digit mobile number (e.g. +91 7001832118).';
+      phoneErr.classList.remove('hidden');
+    }
+    if (phoneInput) phoneInput.focus();
+    return false;
+  }
+
+  // Generate 6-digit OTP Code
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  state.generatedOtp = otpCode;
+  state.isPhoneVerified = false;
+
+  if (otpNoticeText) {
+    otpNoticeText.innerHTML = `<strong>📲 SMS OTP Sent to ${phone}!</strong> [Verification Code: <span class="font-mono font-bold text-emerald-950 underline">${otpCode}</span>]`;
+  }
+
+  if (otpContainer) otpContainer.classList.remove('hidden');
+  if (otpSuccessBadge) otpSuccessBadge.classList.add('hidden');
+
+  // Start 30s Countdown Timer
+  let timeLeft = 30;
+  if (state.otpCountdownTimer) clearInterval(state.otpCountdownTimer);
+
+  if (sendOtpBtn) sendOtpBtn.disabled = true;
+  if (triggerOtpBtn) triggerOtpBtn.disabled = true;
+
+  state.otpCountdownTimer = setInterval(() => {
+    timeLeft--;
+    if (otpTimerText) otpTimerText.textContent = `Resend in ${timeLeft}s`;
+    if (timeLeft <= 0) {
+      clearInterval(state.otpCountdownTimer);
+      if (otpTimerText) otpTimerText.textContent = 'Resend OTP';
+      if (sendOtpBtn) sendOtpBtn.disabled = false;
+      if (triggerOtpBtn) triggerOtpBtn.disabled = false;
+    }
+  }, 1000);
+
+  return true;
+}
+
+function verifyCheckoutOtp() {
+  const otpInput = document.getElementById('checkoutOtpInput');
+  const otpErrorText = document.getElementById('otpErrorText');
+  const otpSuccessBadge = document.getElementById('otpSuccessBadge');
+  const enteredOtp = otpInput ? otpInput.value.trim() : '';
+
+  if (!state.generatedOtp) {
+    if (otpErrorText) {
+      otpErrorText.textContent = 'Please click "Get OTP" or "Send OTP" to receive verification code.';
+      otpErrorText.classList.remove('hidden');
+    }
+    return false;
+  }
+
+  if (!enteredOtp || enteredOtp.length !== 6) {
+    if (otpErrorText) {
+      otpErrorText.textContent = 'Please enter the 6-digit OTP code sent to your phone.';
+      otpErrorText.classList.remove('hidden');
+    }
+    return false;
+  }
+
+  if (enteredOtp !== state.generatedOtp) {
+    if (otpErrorText) {
+      otpErrorText.textContent = 'Invalid OTP Code. Please enter the correct 6-digit code or click Resend OTP.';
+      otpErrorText.classList.remove('hidden');
+    }
+    state.isPhoneVerified = false;
+    return false;
+  }
+
+  // OTP Verified Successfully!
+  state.isPhoneVerified = true;
+  if (otpErrorText) otpErrorText.classList.add('hidden');
+  if (otpSuccessBadge) {
+    otpSuccessBadge.classList.remove('hidden');
+    otpSuccessBadge.classList.add('flex');
+  }
+  return true;
+}
+
 // Handle Order Checkout Submission: DB Table + JSON file upload + PDF invoice upload to Supabase Storage Bucket 'orders'
 async function handleCheckoutSubmit(e) {
   e.preventDefault();
@@ -605,6 +1800,21 @@ async function handleCheckoutSubmit(e) {
     return;
   }
 
+  // Mandatory Mobile Phone OTP Verification Check
+  if (!state.generatedOtp) {
+    sendCheckoutOtp();
+    showOrderAlert('📲 Verification OTP sent to your phone! Please enter the 6-digit OTP code below to confirm your order.');
+    return;
+  }
+
+  if (!state.isPhoneVerified) {
+    const verified = verifyCheckoutOtp();
+    if (!verified) {
+      showOrderAlert('🔒 Mobile phone verification required! Please enter valid 6-digit OTP code before placing order.');
+      return;
+    }
+  }
+
   const total = updateCheckoutTotal();
 
   if (total <= 0) {
@@ -637,6 +1847,19 @@ async function handleCheckoutSubmit(e) {
   const { data: dbData, error: dbError } = await supabase.from('orders').insert([orderPayload]).select();
   if (dbError) {
     console.error('Order DB Table Error:', dbError);
+  } else if (dbData && dbData[0]) {
+    // Record payment entry in 'payments' collection
+    try {
+      await supabase.from('payments').insert([{
+        order_id: dbData[0].id,
+        user_id: state.currentUser?.id || null,
+        amount: total,
+        payment_method: 'COD',
+        payment_status: 'pending'
+      }]);
+    } catch (payErr) {
+      console.error('Payment collection insert error:', payErr);
+    }
   }
 
   // 2. Upload order receipt JSON file into Supabase Storage Bucket 'orders'
@@ -704,6 +1927,8 @@ function setupAuthAndOrderEvents() {
 
     elements.signInForm.classList.remove('hidden');
     elements.signUpForm.classList.add('hidden');
+    elements.forgotPasswordForm.classList.add('hidden');
+    if (elements.authTabs) elements.authTabs.classList.remove('hidden');
     hideAuthAlert();
   });
 
@@ -715,8 +1940,380 @@ function setupAuthAndOrderEvents() {
 
     elements.signUpForm.classList.remove('hidden');
     elements.signInForm.classList.add('hidden');
+    elements.forgotPasswordForm.classList.add('hidden');
+    if (elements.authTabs) elements.authTabs.classList.remove('hidden');
     hideAuthAlert();
   });
+
+  const toggleAdminBtn = document.getElementById('toggleAdminPasscodeFieldBtn');
+  const adminPasscodeContainer = document.getElementById('adminPasscodeContainer');
+  if (toggleAdminBtn && adminPasscodeContainer) {
+    toggleAdminBtn.addEventListener('click', () => {
+      adminPasscodeContainer.classList.toggle('hidden');
+    });
+  }
+
+  if (elements.openForgotPassBtn) {
+    elements.openForgotPassBtn.addEventListener('click', () => {
+      elements.signInForm.classList.add('hidden');
+      elements.signUpForm.classList.add('hidden');
+      elements.forgotPasswordForm.classList.remove('hidden');
+      if (elements.authTabs) elements.authTabs.classList.add('hidden');
+      hideAuthAlert();
+    });
+  }
+
+  if (elements.backToSignInBtn) {
+    elements.backToSignInBtn.addEventListener('click', () => {
+      elements.forgotPasswordForm.classList.add('hidden');
+      elements.signInForm.classList.remove('hidden');
+      if (elements.authTabs) elements.authTabs.classList.remove('hidden');
+      hideAuthAlert();
+    });
+  }
+
+  if (elements.forgotPasswordForm) {
+    elements.forgotPasswordForm.addEventListener('submit', handleForgotPassword);
+  }
+
+  if (elements.resetPasswordForm) {
+    elements.resetPasswordForm.addEventListener('submit', handleResetPassword);
+  }
+
+  if (elements.openResetModalBtn) {
+    elements.openResetModalBtn.addEventListener('click', () => {
+      if (elements.resetPasswordModal) {
+        hideResetAlert();
+        elements.resetPasswordModal.classList.remove('hidden');
+      }
+    });
+  }
+
+  if (elements.closeResetModalBtn) {
+    elements.closeResetModalBtn.addEventListener('click', () => elements.resetPasswordModal.classList.add('hidden'));
+  }
+
+  if (elements.adminPortalBtn) {
+    elements.adminPortalBtn.addEventListener('click', () => {
+      elements.adminDashboardModal.classList.remove('hidden');
+      loadAdminDashboard();
+      loadAdminProductsTable();
+    });
+  }
+
+  // Admin Portal Tab Navigation (Orders vs Products)
+  const adminTabOrdersBtn = document.getElementById('adminTabOrdersBtn');
+  const adminTabProductsBtn = document.getElementById('adminTabProductsBtn');
+  const adminOrdersSec = document.getElementById('adminOrdersSection');
+  const adminProductsSec = document.getElementById('adminProductsSection');
+
+  if (adminTabOrdersBtn && adminTabProductsBtn && adminOrdersSec && adminProductsSec) {
+    adminTabOrdersBtn.addEventListener('click', () => {
+      adminTabOrdersBtn.classList.add('font-bold', 'text-primary', 'border-primary');
+      adminTabOrdersBtn.classList.remove('font-semibold', 'text-on-surface-variant', 'border-transparent');
+      adminTabProductsBtn.classList.remove('font-bold', 'text-primary', 'border-primary');
+      adminTabProductsBtn.classList.add('font-semibold', 'text-on-surface-variant', 'border-transparent');
+
+      adminOrdersSec.classList.remove('hidden');
+      adminProductsSec.classList.add('hidden');
+    });
+
+    adminTabProductsBtn.addEventListener('click', () => {
+      adminTabProductsBtn.classList.add('font-bold', 'text-primary', 'border-primary');
+      adminTabProductsBtn.classList.remove('font-semibold', 'text-on-surface-variant', 'border-transparent');
+      adminTabOrdersBtn.classList.remove('font-bold', 'text-primary', 'border-primary');
+      adminTabOrdersBtn.classList.add('font-semibold', 'text-on-surface-variant', 'border-transparent');
+
+      adminProductsSec.classList.remove('hidden');
+      adminOrdersSec.classList.add('hidden');
+    });
+  }
+
+  if (elements.refreshAdminOrdersBtn) {
+    elements.refreshAdminOrdersBtn.addEventListener('click', () => {
+      loadAdminDashboard();
+    });
+  }
+
+  // Toggle Add Product Form
+  const toggleAddProductBtn = document.getElementById('toggleAddProductFormBtn');
+  const cancelAddProductBtn = document.getElementById('cancelAddProductBtn');
+  const addProductForm = document.getElementById('adminAddProductFormContainer');
+
+  if (toggleAddProductBtn && addProductForm) {
+    toggleAddProductBtn.addEventListener('click', () => {
+      addProductForm.classList.toggle('hidden');
+    });
+  }
+  if (cancelAddProductBtn && addProductForm) {
+    cancelAddProductBtn.addEventListener('click', () => {
+      addProductForm.classList.add('hidden');
+    });
+  }
+
+  // Handle Add Product Submit
+  if (addProductForm) {
+    addProductForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('newProdName').value.trim();
+      const catId = document.getElementById('newProdCategory').value;
+      const price = parseFloat(document.getElementById('newProdPrice').value);
+      const unit = document.getElementById('newProdUnit').value.trim();
+      const avail = document.getElementById('newProdAvailability').value === 'true';
+      const visSelect = document.getElementById('newProdVisibility');
+      const isHidden = visSelect ? visSelect.value === 'true' : false;
+      const badgeSelect = document.getElementById('newProdBadge');
+      const badgeVal = badgeSelect ? (badgeSelect.value || null) : null;
+      const fileInput = document.getElementById('newProdImageFile');
+      const desc = document.getElementById('newProdDescription').value.trim();
+      const submitBtn = document.getElementById('submitNewProductBtn');
+
+      if (!name || isNaN(price) || !unit) {
+        alert('Please provide Product Name, Price, and Unit Weight.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Uploading picture & saving...';
+
+      let uploadedImageUrl = null;
+      if (fileInput && fileInput.files && fileInput.files[0]) {
+        try {
+          uploadedImageUrl = await uploadProductImage(fileInput.files[0]);
+        } catch (uploadErr) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Product';
+          alert(`Image upload failed: ${uploadErr.message}`);
+          return;
+        }
+      }
+
+      try {
+        await createProduct({
+          name: name,
+          category_id: catId || null,
+          price: price,
+          unit: unit,
+          is_available: avail,
+          is_hidden: isHidden,
+          badge: badgeVal,
+          image_url: uploadedImageUrl || null,
+          description: desc
+        });
+
+        alert(`Product "${name}" created successfully!`);
+        addProductForm.reset();
+        addProductForm.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Product';
+
+        loadAdminProductsTable();
+        renderCustomerProductsGrid();
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Product';
+        alert(`Failed to create product: ${err.message}`);
+      }
+    });
+  }
+
+  // Mobile Nav Drawer Event Listeners
+  const mobileToggleBtn = document.getElementById('mobileMenuToggleBtn');
+  const closeMobileDrawerBtn = document.getElementById('closeMobileNavDrawerBtn');
+  const mobileDrawer = document.getElementById('mobileNavDrawer');
+  const mobileOrderNowBtn = document.getElementById('mobileOrderNowBtn');
+  const mobileGuestAuthBtn = document.getElementById('mobileGuestAuthBtn');
+  const mobileMyOrdersBtn = document.getElementById('mobileMyOrdersBtn');
+  const mobileAdminPortalBtn = document.getElementById('mobileAdminPortalBtn');
+
+  if (mobileToggleBtn && mobileDrawer) {
+    mobileToggleBtn.addEventListener('click', () => {
+      mobileDrawer.classList.remove('hidden');
+    });
+  }
+  if (closeMobileDrawerBtn && mobileDrawer) {
+    closeMobileDrawerBtn.addEventListener('click', () => {
+      mobileDrawer.classList.add('hidden');
+    });
+  }
+  if (mobileDrawer) {
+    mobileDrawer.addEventListener('click', (e) => {
+      if (e.target === mobileDrawer) {
+        mobileDrawer.classList.add('hidden');
+      }
+    });
+  }
+
+  document.querySelectorAll('.mobile-nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+    });
+  });
+
+  if (mobileOrderNowBtn) {
+    mobileOrderNowBtn.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      triggerOrderFlow();
+    });
+  }
+
+  if (mobileGuestAuthBtn) {
+    mobileGuestAuthBtn.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      openAuthModal();
+    });
+  }
+
+  if (mobileMyOrdersBtn) {
+    mobileMyOrdersBtn.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      loadMyOrders();
+    });
+  }
+
+  if (mobileAdminPortalBtn) {
+    mobileAdminPortalBtn.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      loadAdminDashboard();
+    });
+  }
+
+  // User Profile Modal Listeners
+  const profileModal = document.getElementById('userProfileModal');
+  const openProfileBtn = document.getElementById('openProfileModalBtn');
+  const mobileUserInfo = document.getElementById('mobileUserInfo');
+  const closeProfileBtn = document.getElementById('closeProfileModalBtn');
+  const profileMyOrdersBtn = document.getElementById('profileMyOrdersBtn');
+  const profileResetPassBtn = document.getElementById('profileResetPassBtn');
+  const profileSignOutBtn = document.getElementById('profileSignOutBtn');
+
+  const openProfileModal = () => {
+    if (profileModal && state.currentUser) {
+      profileModal.classList.remove('hidden');
+    }
+  };
+
+  if (openProfileBtn) openProfileBtn.addEventListener('click', openProfileModal);
+  if (mobileUserInfo) {
+    mobileUserInfo.style.cursor = 'pointer';
+    mobileUserInfo.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      openProfileModal();
+    });
+  }
+  if (closeProfileBtn && profileModal) {
+    closeProfileBtn.addEventListener('click', () => profileModal.classList.add('hidden'));
+  }
+  if (profileModal) {
+    profileModal.addEventListener('click', (e) => {
+      if (e.target === profileModal) profileModal.classList.add('hidden');
+    });
+  }
+  const profileAdminPortalBtn = document.getElementById('profileAdminPortalBtn');
+  if (profileAdminPortalBtn && profileModal) {
+    profileAdminPortalBtn.addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      elements.adminDashboardModal.classList.remove('hidden');
+      loadAdminDashboard();
+      loadAdminProductsTable();
+    });
+  }
+
+  if (profileMyOrdersBtn && profileModal) {
+    profileMyOrdersBtn.addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      loadMyOrders();
+    });
+  }
+  if (profileResetPassBtn && profileModal) {
+    profileResetPassBtn.addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      if (elements.resetPasswordModal) elements.resetPasswordModal.classList.remove('hidden');
+    });
+  }
+  // User Profile Picture File Upload Listener
+  const avatarFileInput = document.getElementById('profileAvatarFileInput');
+  if (avatarFileInput) {
+    avatarFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!state.currentUser) {
+        alert('Please sign in to update your profile picture.');
+        return;
+      }
+
+      try {
+        const pAvatarImg = document.getElementById('profileAvatarImg');
+        if (pAvatarImg) pAvatarImg.style.opacity = '0.5';
+
+        const publicUrl = await uploadAvatarImage(file, state.currentUser.id);
+        
+        if (state.currentUser.user_metadata) {
+          state.currentUser.user_metadata.avatar_url = publicUrl;
+        } else {
+          state.currentUser.user_metadata = { avatar_url: publicUrl };
+        }
+
+        updateUserUI(state.currentUser);
+        if (pAvatarImg) pAvatarImg.style.opacity = '1';
+        alert('Profile picture updated successfully!');
+      } catch (uploadErr) {
+        alert(`Failed to update profile picture: ${uploadErr.message}`);
+      }
+    });
+  }
+
+  // Remove Profile Picture Listener
+  const removeAvatarBtn = document.getElementById('removeProfileAvatarBtn');
+  if (removeAvatarBtn) {
+    removeAvatarBtn.addEventListener('click', async () => {
+      if (!state.currentUser) return;
+      if (!confirm('Are you sure you want to remove your profile picture?')) return;
+
+      try {
+        await removeAvatarImage();
+        if (state.currentUser.user_metadata) {
+          state.currentUser.user_metadata.avatar_url = null;
+        }
+        updateUserUI(state.currentUser);
+        alert('Profile picture removed successfully!');
+      } catch (err) {
+        alert(`Failed to remove profile picture: ${err.message}`);
+      }
+    });
+  }
+
+  if (profileSignOutBtn && profileModal) {
+    profileSignOutBtn.addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      handleSignOut();
+    });
+  }
+
+  const mobileSignOutBtn = document.getElementById('mobileSignOutBtn');
+  if (mobileSignOutBtn) {
+    mobileSignOutBtn.addEventListener('click', () => {
+      if (mobileDrawer) mobileDrawer.classList.add('hidden');
+      handleSignOut();
+    });
+  }
+
+  if (elements.closeAdminModalBtn) {
+    elements.closeAdminModalBtn.addEventListener('click', () => elements.adminDashboardModal.classList.add('hidden'));
+  }
+
+  if (elements.refreshAdminOrdersBtn) {
+    elements.refreshAdminOrdersBtn.addEventListener('click', () => loadAdminDashboard());
+  }
+
+  if (elements.myOrdersBtn) {
+    elements.myOrdersBtn.addEventListener('click', () => loadMyOrders());
+  }
+
+  if (elements.closeMyOrdersModalBtn) {
+    elements.closeMyOrdersModalBtn.addEventListener('click', () => elements.myOrdersModal.classList.add('hidden'));
+  }
 
   elements.signInForm.addEventListener('submit', handleSignIn);
   elements.signUpForm.addEventListener('submit', handleSignUp);
@@ -725,8 +2322,33 @@ function setupAuthAndOrderEvents() {
   setupPasswordToggles();
 
   elements.orderNowNavBtn.addEventListener('click', () => triggerOrderFlow());
+  const gOrderBtn = document.getElementById('guestOrderNowNavBtn');
+  if (gOrderBtn) {
+    gOrderBtn.addEventListener('click', () => triggerOrderFlow());
+  }
   elements.closeOrderModalBtn.addEventListener('click', () => elements.orderModal.classList.add('hidden'));
   elements.closeSuccessModalBtn.addEventListener('click', () => elements.orderSuccessModal.classList.add('hidden'));
+
+  // Mobile Phone OTP Event Listeners
+  const sendOtpBtn = document.getElementById('sendOtpBtn');
+  const triggerOtpBtn = document.getElementById('triggerOtpBtn');
+  const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+  const phoneInput = document.getElementById('phoneNumber');
+
+  if (sendOtpBtn) sendOtpBtn.addEventListener('click', () => sendCheckoutOtp());
+  if (triggerOtpBtn) triggerOtpBtn.addEventListener('click', () => sendCheckoutOtp());
+  if (verifyOtpBtn) verifyOtpBtn.addEventListener('click', () => verifyCheckoutOtp());
+
+  if (phoneInput) {
+    phoneInput.addEventListener('input', () => {
+      state.isPhoneVerified = false;
+      state.generatedOtp = null;
+      const otpContainer = document.getElementById('otpContainer');
+      const otpSuccessBadge = document.getElementById('otpSuccessBadge');
+      if (otpContainer) otpContainer.classList.add('hidden');
+      if (otpSuccessBadge) otpSuccessBadge.classList.add('hidden');
+    });
+  }
 
   if (elements.downloadPdfBtn) {
     elements.downloadPdfBtn.addEventListener('click', () => {
@@ -776,12 +2398,32 @@ function setupEventListeners() {
   window.addEventListener('scroll', updateScrollSync, { passive: true });
   setupSmoothNavigation();
   setupAuthAndOrderEvents();
+  setupBackgroundFreezeObserver();
   checkAuthSession();
+}
+
+function setupRealtimeProductsSubscription() {
+  try {
+    supabase
+      .channel('public:products_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+        console.log('Live database update detected on products table:', payload);
+        renderCustomerProductsGrid();
+        if (state.currentUserRole === 'Admin') {
+          loadAdminProductsTable();
+        }
+      })
+      .subscribe();
+  } catch (err) {
+    console.error('Realtime subscription error:', err);
+  }
 }
 
 async function init() {
   setupEventListeners();
   await preloadFrames();
+  renderCustomerProductsGrid();
+  setupRealtimeProductsSubscription();
 
   setTimeout(() => {
     if (elements.preloader) {
