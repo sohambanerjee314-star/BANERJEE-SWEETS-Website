@@ -43,11 +43,11 @@ export async function uploadProductImage(file) {
  * @param {String} userId - Current user ID
  * @returns {Promise<String>} Public URL of uploaded avatar image
  */
-export async function uploadAvatarImage(file, userId) {
+export async function uploadAvatarImage(file, userId, email = null) {
   if (!file) throw new Error('No avatar image file selected.');
 
-  const fileExt = file.name.split('.').pop();
-  const fileName = `avatar_${userId || 'guest'}_${Date.now()}.${fileExt}`;
+  const fileExt = file.name.split('.').pop() || 'png';
+  const fileName = `avatar_${userId || 'user'}_${Date.now()}.${fileExt}`;
   const filePath = `profiles/${fileName}`;
 
   const { data, error } = await supabase.storage
@@ -77,22 +77,43 @@ export async function uploadAvatarImage(file, userId) {
     console.warn('Could not update auth metadata avatar_url:', updateErr);
   }
 
+  // Dual persist via RPC to ensure database raw_user_metadata is always updated
+  try {
+    await supabase.rpc('update_user_avatar_direct', {
+      p_user_id: userId || null,
+      p_avatar_url: publicUrl,
+      p_email: email || null
+    });
+  } catch (rpcErr) {
+    console.warn('Could not update avatar via RPC update_user_avatar_direct:', rpcErr);
+  }
+
   return publicUrl;
 }
 
 /**
- * Remove user profile picture from Supabase Auth metadata
+ * Remove user profile picture from Supabase Auth metadata & database
  * @returns {Promise<Boolean>} Success status
  */
-export async function removeAvatarImage() {
+export async function removeAvatarImage(userId = null, email = null) {
   const { error } = await supabase.auth.updateUser({
     data: { avatar_url: null }
   });
 
   if (error) {
     console.error('Error removing profile picture metadata:', error);
-    throw error;
   }
+
+  try {
+    await supabase.rpc('update_user_avatar_direct', {
+      p_user_id: userId || null,
+      p_avatar_url: null,
+      p_email: email || null
+    });
+  } catch (rpcErr) {
+    console.warn('Could not remove avatar via RPC update_user_avatar_direct:', rpcErr);
+  }
+
   return true;
 }
 

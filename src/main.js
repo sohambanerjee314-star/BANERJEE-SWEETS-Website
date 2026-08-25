@@ -150,7 +150,12 @@ const ctx = elements.canvas.getContext('2d');
 // Canvas Size Adjustment
 function resizeCanvas() {
   if (!elements.canvasContainer) return;
-  const dpr = window.devicePixelRatio || 1;
+  const isMobile = window.innerWidth < 768;
+  // Cap the Device Pixel Ratio on mobile. Phones often have DPR of 3 or 4, 
+  // which forces the canvas to draw at massive 4K+ resolutions on every scroll frame, causing severe lag.
+  const maxDpr = isMobile ? 1.25 : 2; 
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+  
   const width = elements.canvasContainer.clientWidth;
   const height = elements.canvasContainer.clientHeight;
 
@@ -202,36 +207,71 @@ function renderFrame(frameIndex) {
 function preloadFrames() {
   return new Promise((resolve) => {
     let loadedCount = 0;
-    const totalToLoad = TOTAL_FRAMES * 2;
+    const isMobile = window.innerWidth < 768;
+    const totalToLoad = TOTAL_FRAMES;
+    const batchSize = 10;
+    let currentIndex = 1;
 
     const checkComplete = () => {
       loadedCount++;
       state.loadedFrames = loadedCount;
       const percent = Math.floor((loadedCount / totalToLoad) * 100);
       updatePreloaderUI(percent, loadedCount);
+      
       if (loadedCount === totalToLoad) {
         state.isLoaded = true;
         resolve();
       }
     };
 
-    // Load Desktop Frames
-    for (let i = 1; i <= TOTAL_FRAMES; i++) {
-      const img = new Image();
-      img.src = getFrameUrl(i, false);
-      img.onload = checkComplete;
-      img.onerror = checkComplete;
-      state.desktopFrames.push(img);
+    const loadNextBatch = () => {
+      let currentBatchCount = 0;
+      const targetForBatch = Math.min(batchSize, totalToLoad - currentIndex + 1);
+      
+      if (targetForBatch <= 0) return;
+
+      for (let i = 0; i < targetForBatch; i++) {
+        const frameId = currentIndex++;
+        const img = new Image();
+        img.src = getFrameUrl(frameId, isMobile);
+        
+        const onFrameComplete = () => {
+          checkComplete();
+          currentBatchCount++;
+          if (currentBatchCount === targetForBatch) {
+            loadNextBatch();
+          }
+        };
+
+        img.onload = onFrameComplete;
+        img.onerror = onFrameComplete;
+        
+        if (isMobile) {
+          state.mobileFrames[frameId] = img;
+        } else {
+          state.desktopFrames[frameId] = img;
+        }
+      }
+    };
+
+    // Initialize arrays with empty slots so indices match frameId
+    if (isMobile) {
+      state.mobileFrames = new Array(totalToLoad + 1);
+    } else {
+      state.desktopFrames = new Array(totalToLoad + 1);
     }
 
-    // Load Mobile Frames (9:16)
-    for (let i = 1; i <= TOTAL_FRAMES; i++) {
-      const img = new Image();
-      img.src = getFrameUrl(i, true);
-      img.onload = checkComplete;
-      img.onerror = checkComplete;
-      state.mobileFrames.push(img);
-    }
+    // Start loading
+    loadNextBatch();
+    
+    // Safety fallback: if tunnel completely hangs, unlock the page after 8 seconds
+    setTimeout(() => {
+      if (!state.isLoaded) {
+        console.warn('Preloader timed out waiting for tunnel. Forcing unlock.');
+        state.isLoaded = true;
+        resolve();
+      }
+    }, 8000);
   });
 }
 
@@ -365,6 +405,226 @@ function setupBackgroundFreezeObserver() {
   checkAndFreeze();
 }
 
+// ================= AUTOMATIC SESSION TIMEOUT MANAGER (CUSTOMERS ONLY) =================
+
+const SessionTimeoutConfig = {
+  // Configurable Inactivity Duration: Default 15 minutes (900,000 ms)
+  timeoutMs: 15 * 60 * 1000,
+  // Warning Dialog Window: 60 seconds (60,000 ms)
+  warningMs: 60 * 1000,
+  // Throttle activity resets to once per second
+  throttleMs: 1000
+};
+
+const sessionChannel = typeof BroadcastChannel !== 'undefined' 
+  ? new BroadcastChannel('bs_customer_session_channel') 
+  : null;
+
+let inactivityState = {
+  lastActivityTime: Date.now(),
+  checkIntervalId: null,
+  countdownIntervalId: null,
+  isWarningShown: false,
+  lastThrottleTime: 0,
+  isActive: false
+};
+
+function initMultiTabSync() {
+  if (sessionChannel) {
+    sessionChannel.onmessage = (event) => {
+      if (!event.data) return;
+      if (event.data.type === 'ACTIVITY_RESET') {
+        resetInactivityTimer(false);
+      } else if (event.data.type === 'LOGOUT') {
+        performInactivityLogout('multi_tab', false);
+      }
+    };
+  }
+
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'bs_session_event') {
+      try {
+        const payload = JSON.parse(event.newValue);
+        if (!payload) return;
+        if (payload.type === 'ACTIVITY_RESET') {
+          resetInactivityTimer(false);
+        } else if (payload.type === 'LOGOUT') {
+          performInactivityLogout('multi_tab', false);
+        }
+      } catch (e) {}
+    }
+  });
+}
+
+function broadcastSessionEvent(type, data = {}) {
+  const payload = { type, timestamp: Date.now(), ...data };
+  if (sessionChannel) {
+    sessionChannel.postMessage(payload);
+  }
+  try {
+    localStorage.setItem('bs_session_event', JSON.stringify(payload));
+  } catch (e) {}
+}
+
+function handleUserActivity(e) {
+  if (!inactivityState.isActive) return;
+  if (inactivityState.isWarningShown) return;
+
+  const now = Date.now();
+  if (now - inactivityState.lastThrottleTime > SessionTimeoutConfig.throttleMs) {
+    inactivityState.lastThrottleTime = now;
+    resetInactivityTimer(true);
+  }
+}
+
+function resetInactivityTimer(shouldBroadcast = true) {
+  inactivityState.lastActivityTime = Date.now();
+
+  if (inactivityState.isWarningShown) {
+    hideSessionExpiringModal();
+  }
+
+  if (shouldBroadcast) {
+    broadcastSessionEvent('ACTIVITY_RESET');
+  }
+}
+
+function showSessionExpiringModal(remainingSeconds) {
+  const modal = document.getElementById('sessionExpiringModal');
+  const countdownEl = document.getElementById('sessionCountdownText');
+  if (!modal) return;
+
+  inactivityState.isWarningShown = true;
+  modal.classList.remove('hidden');
+
+  let secsLeft = Math.max(1, Math.min(60, remainingSeconds));
+  if (countdownEl) countdownEl.textContent = secsLeft;
+
+  if (inactivityState.countdownIntervalId) clearInterval(inactivityState.countdownIntervalId);
+
+  inactivityState.countdownIntervalId = setInterval(() => {
+    secsLeft--;
+    if (countdownEl) countdownEl.textContent = Math.max(0, secsLeft);
+
+    if (secsLeft <= 0) {
+      clearInterval(inactivityState.countdownIntervalId);
+      inactivityState.countdownIntervalId = null;
+      performInactivityLogout('inactivity', true);
+    }
+  }, 1000);
+}
+
+function hideSessionExpiringModal() {
+  inactivityState.isWarningShown = false;
+  const modal = document.getElementById('sessionExpiringModal');
+  if (modal) modal.classList.add('hidden');
+
+  if (inactivityState.countdownIntervalId) {
+    clearInterval(inactivityState.countdownIntervalId);
+    inactivityState.countdownIntervalId = null;
+  }
+}
+
+async function performInactivityLogout(reason = 'inactivity', shouldBroadcast = true) {
+  stopInactivityMonitor();
+  hideSessionExpiringModal();
+
+  if (shouldBroadcast) {
+    broadcastSessionEvent('LOGOUT', { reason });
+  }
+
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error('Logout error:', err);
+  }
+
+  try {
+    localStorage.removeItem('supabase.auth.token');
+    sessionStorage.clear();
+  } catch (e) {}
+
+  updateUserUI(null);
+
+  const modalsToClose = [
+    elements.orderModal,
+    elements.myOrdersModal,
+    elements.userProfileModal,
+    elements.adminDashboardModal
+  ];
+  modalsToClose.forEach(m => { if (m) m.classList.add('hidden'); });
+
+  openAuthModal('You have been logged out due to inactivity.');
+}
+
+function checkInactivityStatus() {
+  if (!inactivityState.isActive) return;
+  if (document.hidden) return;
+
+  const now = Date.now();
+  const elapsed = now - inactivityState.lastActivityTime;
+  const warningThreshold = SessionTimeoutConfig.timeoutMs - SessionTimeoutConfig.warningMs;
+
+  if (elapsed >= SessionTimeoutConfig.timeoutMs) {
+    performInactivityLogout('inactivity', true);
+  } else if (elapsed >= warningThreshold) {
+    if (!inactivityState.isWarningShown) {
+      const remainingSecs = Math.ceil((SessionTimeoutConfig.timeoutMs - elapsed) / 1000);
+      showSessionExpiringModal(remainingSecs);
+    }
+  }
+}
+
+function handleVisibilityChange() {
+  if (!inactivityState.isActive) return;
+  if (!document.hidden) {
+    checkInactivityStatus();
+  }
+}
+
+function startInactivityMonitor() {
+  stopInactivityMonitor();
+  inactivityState.isActive = true;
+  inactivityState.lastActivityTime = Date.now();
+
+  const events = ['mousemove', 'mousedown', 'click', 'keydown', 'touchstart', 'touchmove', 'scroll', 'pointerdown'];
+  events.forEach(evt => {
+    window.addEventListener(evt, handleUserActivity, { passive: true });
+  });
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  inactivityState.checkIntervalId = setInterval(checkInactivityStatus, 1000);
+}
+
+function stopInactivityMonitor() {
+  inactivityState.isActive = false;
+
+  const events = ['mousemove', 'mousedown', 'click', 'keydown', 'touchstart', 'touchmove', 'scroll', 'pointerdown'];
+  events.forEach(evt => {
+    window.removeEventListener(evt, handleUserActivity);
+  });
+
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+  if (inactivityState.checkIntervalId) {
+    clearInterval(inactivityState.checkIntervalId);
+    inactivityState.checkIntervalId = null;
+  }
+
+  hideSessionExpiringModal();
+}
+
+window.setSessionTimeoutMinutes = function(minutes) {
+  if (typeof minutes === 'number' && minutes > 0) {
+    SessionTimeoutConfig.timeoutMs = minutes * 60 * 1000;
+    console.log(`[SessionTimeout] Inactivity timeout set to ${minutes} minutes.`);
+    if (inactivityState.isActive) {
+      resetInactivityTimer(true);
+    }
+  }
+};
+
 // ================= SUPABASE AUTHENTICATION & ORDER ENGINE =================
 
 async function checkAuthSession() {
@@ -400,6 +660,13 @@ function updateUserUI(user) {
     const role = user.user_metadata?.role || 'Customer';
     state.currentUserRole = role;
 
+    // Session inactivity timeout monitor: ONLY for Customer accounts (Admin excluded)
+    if (role === 'Admin') {
+      stopInactivityMonitor();
+    } else {
+      startInactivityMonitor();
+    }
+
     if (elements.userRoleBadge) {
       elements.userRoleBadge.textContent = role;
       if (role === 'Admin') {
@@ -414,13 +681,11 @@ function updateUserUI(user) {
           pAdminBtn.classList.add('flex');
         }
 
-        // Hide 3 horizontal lines (hamburger button) on mobile for Admin
-        if (elements.mobileMenuToggleBtn) {
-          elements.mobileMenuToggleBtn.classList.add('hidden');
+        // Hide Order Now and My Orders header buttons for Admin
+        if (elements.myOrdersBtn) {
+          elements.myOrdersBtn.classList.add('hidden');
+          elements.myOrdersBtn.classList.remove('flex');
         }
-
-        // Hide Order History (My Orders) and Order Now sections for Admin
-        if (elements.myOrdersBtn) elements.myOrdersBtn.classList.add('hidden');
         if (elements.orderNowNavBtn) {
           elements.orderNowNavBtn.classList.add('hidden');
           elements.orderNowNavBtn.classList.remove('flex');
@@ -432,6 +697,8 @@ function updateUserUI(user) {
         }
         const pMyOrdersBtn = document.getElementById('profileMyOrdersBtn');
         if (pMyOrdersBtn) pMyOrdersBtn.classList.add('hidden');
+
+        // Hide Order section buttons on product cards for Admin
         document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.add('hidden'));
 
       } else {
@@ -446,12 +713,7 @@ function updateUserUI(user) {
           pAdminBtn.classList.remove('flex');
         }
 
-        // Show 3 horizontal lines (hamburger button) on mobile for Customer
-        if (elements.mobileMenuToggleBtn) {
-          elements.mobileMenuToggleBtn.classList.remove('hidden');
-        }
-
-        // Show Order History (My Orders) for Customer (Desktop header only)
+        // Show Order History (My Orders) and Order Now for Customer
         if (elements.myOrdersBtn) {
           if (isMobile) {
             elements.myOrdersBtn.classList.add('hidden');
@@ -462,7 +724,6 @@ function updateUserUI(user) {
           }
         }
 
-        // Show Order Now button for Customer (Desktop header only, placed right after Profile button)
         if (elements.orderNowNavBtn) {
           if (isMobile) {
             elements.orderNowNavBtn.classList.add('hidden');
@@ -481,8 +742,13 @@ function updateUserUI(user) {
 
         const pMyOrdersBtn = document.getElementById('profileMyOrdersBtn');
         if (pMyOrdersBtn) pMyOrdersBtn.classList.remove('hidden');
-        document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.remove('hidden'));
       }
+
+      if (elements.mobileMenuToggleBtn) {
+        elements.mobileMenuToggleBtn.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('.item-order-btn').forEach(btn => btn.classList.remove('hidden'));
     }
 
     // Update Mobile Nav Drawer User Section
@@ -531,6 +797,9 @@ function updateUserUI(user) {
     const headerAvatarIcon = document.getElementById('headerUserAvatarIcon');
     const profileAvatarImg = document.getElementById('profileAvatarImg');
     const profileAvatarIcon = document.getElementById('profileAvatarIcon');
+    const viewerAvatarImg = document.getElementById('viewerAvatarImg');
+    const viewerAvatarIcon = document.getElementById('viewerAvatarIcon');
+    const viewerRemoveBtn = document.getElementById('viewerRemoveAvatarBtn');
 
     const removeAvatarBtn = document.getElementById('removeProfileAvatarBtn');
 
@@ -546,6 +815,17 @@ function updateUserUI(user) {
         profileAvatarImg.classList.remove('hidden');
       }
       if (profileAvatarIcon) profileAvatarIcon.classList.add('hidden');
+
+      if (viewerAvatarImg) {
+        viewerAvatarImg.src = avatarUrl;
+        viewerAvatarImg.classList.remove('hidden');
+      }
+      if (viewerAvatarIcon) viewerAvatarIcon.classList.add('hidden');
+      if (viewerRemoveBtn) {
+        viewerRemoveBtn.classList.remove('hidden');
+        viewerRemoveBtn.classList.add('flex');
+      }
+
       if (removeAvatarBtn) {
         removeAvatarBtn.classList.remove('hidden');
         removeAvatarBtn.classList.add('flex');
@@ -556,6 +836,14 @@ function updateUserUI(user) {
 
       if (profileAvatarImg) profileAvatarImg.classList.add('hidden');
       if (profileAvatarIcon) profileAvatarIcon.classList.remove('hidden');
+
+      if (viewerAvatarImg) viewerAvatarImg.classList.add('hidden');
+      if (viewerAvatarIcon) viewerAvatarIcon.classList.remove('hidden');
+      if (viewerRemoveBtn) {
+        viewerRemoveBtn.classList.add('hidden');
+        viewerRemoveBtn.classList.remove('flex');
+      }
+
       if (removeAvatarBtn) {
         removeAvatarBtn.classList.add('hidden');
         removeAvatarBtn.classList.remove('flex');
@@ -578,6 +866,7 @@ function updateUserUI(user) {
       document.getElementById('phoneNumber').value = userPhone;
     }
   } else {
+    stopInactivityMonitor();
     state.currentUserRole = 'Customer';
     elements.openAuthModalBtn.classList.remove('hidden');
     elements.userProfileNav.classList.add('hidden');
@@ -663,7 +952,7 @@ function formatAlertMessage(msg) {
   if (typeof msg === 'string') {
     const trimmed = msg.trim();
     if (trimmed === '{}' || trimmed === '[object Object]' || trimmed === 'Error' || !trimmed) {
-      return 'Registration request failed. Please verify your details or try a different email address.';
+      return 'An error occurred. Please verify your details and try again.';
     }
     return trimmed;
   }
@@ -678,7 +967,7 @@ function formatAlertMessage(msg) {
       return msg.error.trim();
     }
   }
-  return 'Registration request failed. Please verify your details and try again.';
+  return 'An error occurred. Please verify your details and try again.';
 }
 
 function showAuthAlert(message, type = 'error') {
@@ -730,7 +1019,11 @@ async function handleSignIn(e) {
   submitBtn.textContent = 'Sign In';
 
   if (error) {
-    showAuthAlert(error.message, 'error');
+    let msg = error.message || 'Failed to sign in.';
+    if (msg.toLowerCase().includes('failed to fetch')) {
+      msg = 'Connection error: Unable to reach authentication server. Please check your internet connection or try again.';
+    }
+    showAuthAlert(msg, 'error');
   } else {
     // If owner email or registered as admin, ensure role is set to Admin
     if (data?.user && (email.toLowerCase() === 'sohambanerjee314@gmail.com' || data.user.user_metadata?.role === 'Admin')) {
@@ -862,36 +1155,80 @@ async function handleSignUp(e) {
   }
 }
 
+let currentResetEmail = '';
+
 // Handle Forgot Password
 async function handleForgotPassword(e) {
   e.preventDefault();
-  const email = elements.forgotPassEmail.value;
+  const email = elements.forgotPassEmail ? elements.forgotPassEmail.value.trim() : '';
   const submitBtn = elements.forgotPassSubmitBtn;
 
+  if (!email) {
+    showAuthAlert('Please enter a valid registered email address.', 'error');
+    return;
+  }
+
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Sending link...';
+  submitBtn.textContent = 'Processing...';
   hideAuthAlert();
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}#reset-password`
-  });
+  try {
+    // 1. Try standard Supabase reset link email
+    let emailSent = false;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}#reset-password`
+    });
 
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Send Reset Link';
+    if (!error) {
+      emailSent = true;
+    }
 
-  if (error) {
-    showAuthAlert(error.message, 'error');
-  } else {
-    showAuthAlert('Password reset email sent! Please check your inbox/spam folder.', 'success');
+    if (emailSent) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Reset Link';
+      showAuthAlert('Password reset email sent! Please check your inbox/spam folder.', 'success');
+      return;
+    }
+
+    // 2. Fallback: If Supabase email service failed (SMTP 500 error / rate limit), verify user in DB and allow direct password reset
+    const { data: userExists, error: checkErr } = await supabase.rpc('check_user_exists', { p_email: email });
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send Reset Link';
+
+    if (checkErr || !userExists) {
+      showAuthAlert('No registered account was found with this email address. Please check your email or sign up.', 'error');
+      return;
+    }
+
+    currentResetEmail = email;
+
+    // Transition to Reset Password Modal so user can directly set their new password
+    elements.authModal.classList.add('hidden');
+    if (elements.resetPasswordModal) {
+      elements.resetPasswordModal.classList.remove('hidden');
+      if (elements.newResetPassword) elements.newResetPassword.focus();
+      showResetAlert(`Account verified for ${email}! Enter your new password below.`, 'success');
+    }
+  } catch (err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send Reset Link';
+    console.error('Forgot password exception:', err);
+    showAuthAlert('An error occurred. Please check your email and try again.', 'error');
   }
 }
 
 // Handle Reset Password
 async function handleResetPassword(e) {
   e.preventDefault();
-  const newPass = elements.newResetPassword.value;
-  const confirmPass = elements.confirmResetPassword.value;
+  const newPass = elements.newResetPassword ? elements.newResetPassword.value : '';
+  const confirmPass = elements.confirmResetPassword ? elements.confirmResetPassword.value : '';
   const submitBtn = elements.resetPasswordSubmitBtn;
+
+  if (!newPass || newPass.length < 6) {
+    showResetAlert('Password must be at least 6 characters long.', 'error');
+    return;
+  }
 
   if (newPass !== confirmPass) {
     showResetAlert('Passwords do not match!', 'error');
@@ -902,19 +1239,60 @@ async function handleResetPassword(e) {
   submitBtn.textContent = 'Updating...';
   hideResetAlert();
 
-  const { error } = await supabase.auth.updateUser({ password: newPass });
+  try {
+    // Attempt standard Supabase update user if session exists
+    const { error: authUpdateErr } = await supabase.auth.updateUser({ password: newPass });
 
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Update Password';
+    if (!authUpdateErr) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Update Password';
+      showResetAlert('Password updated successfully!', 'success');
+      setTimeout(() => {
+        elements.resetPasswordModal.classList.add('hidden');
+        openAuthModal('Password updated successfully! Please sign in with your new password.');
+        if (elements.signInEmail && currentResetEmail) {
+          elements.signInEmail.value = currentResetEmail;
+        }
+      }, 1200);
+      return;
+    }
 
-  if (error) {
-    showResetAlert(error.message, 'error');
-  } else {
-    showResetAlert('Password updated successfully!', 'success');
-    setTimeout(() => {
-      elements.resetPasswordModal.classList.add('hidden');
-      openAuthModal('Password updated successfully! Please sign in with your new password.');
-    }, 1200);
+    // Fallback: Direct password reset via RPC for non-email-link flows
+    const emailToReset = currentResetEmail || (elements.forgotPassEmail ? elements.forgotPassEmail.value.trim() : '');
+
+    if (!emailToReset) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Update Password';
+      showResetAlert('Session expired or email missing. Please try Forgot Password again.', 'error');
+      return;
+    }
+
+    const { data, error: rpcErr } = await supabase.rpc('reset_password_direct', {
+      p_email: emailToReset,
+      p_new_password: newPass
+    });
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Update Password';
+
+    if (rpcErr) {
+      console.error('Reset Password Direct RPC Error:', rpcErr);
+      showResetAlert(rpcErr.message || 'Failed to update password. Please try again.', 'error');
+    } else {
+      showResetAlert('Password updated successfully!', 'success');
+      setTimeout(() => {
+        elements.resetPasswordModal.classList.add('hidden');
+        openAuthModal('Password updated successfully! Please sign in with your new password.');
+        if (elements.signInEmail) {
+          elements.signInEmail.value = emailToReset;
+        }
+      }, 1200);
+    }
+  } catch (err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Update Password';
+    console.error('Reset Password Exception:', err);
+    showResetAlert(err.message || 'An error occurred while updating password.', 'error');
   }
 }
 
@@ -956,21 +1334,30 @@ async function loadAdminDashboard() {
     return;
   }
 
-  elements.adminOrdersTableBody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">Fetching latest orders...</td></tr>';
+  elements.adminOrdersTableBody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">Fetching latest orders & profiles...</td></tr>';
   elements.adminDashboardModal.classList.remove('hidden');
 
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('*')
-    .order('created_at', { ascending: false });
+  let orders = [];
+  const { data: rpcOrders, error: rpcErr } = await supabase.rpc('get_admin_orders_with_profiles');
 
-  if (error) {
-    console.error('Error fetching admin orders:', error);
-    elements.adminOrdersTableBody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-error">Failed to load orders: ${error.message}</td></tr>`;
-    return;
+  if (!rpcErr && rpcOrders) {
+    orders = rpcOrders;
+  } else {
+    console.warn('RPC get_admin_orders_with_profiles fallback to direct table query:', rpcErr);
+    const { data: tableOrders, error: tableErr } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (tableErr) {
+      console.error('Error fetching admin orders:', tableErr);
+      elements.adminOrdersTableBody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-error">Failed to load orders: ${tableErr.message}</td></tr>`;
+      return;
+    }
+    orders = tableOrders || [];
   }
 
-  state.allOrders = orders || [];
+  state.allOrders = orders;
   renderAdminOrders();
 }
 
@@ -1004,39 +1391,130 @@ function renderAdminOrders() {
 
     const displayStatus = status.replace(/_/g, ' ');
 
+    const customerName = order.full_name || order.user_email?.split('@')[0] || 'Customer';
+    const avatarUrl = order.avatar_url;
+
+    const avatarHtml = avatarUrl
+      ? `<img src="${avatarUrl}" class="w-8 h-8 rounded-full object-cover border border-primary/40 shadow-2xs shrink-0" alt="${customerName}" />`
+      : `<div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0"><span class="material-symbols-outlined text-lg">account_circle</span></div>`;
+
     return `
-      <tr class="hover:bg-surface-container/50 border-b border-outline-variant/20">
+      <tr class="hover:bg-surface-container/60 border-b border-outline-variant/20 transition-colors cursor-pointer admin-order-row" data-order-id="${order.order_id}">
         <td class="p-3 font-bold text-primary">${order.order_id || '#'}</td>
-        <td class="p-3 truncate max-w-[150px]">${order.user_email || 'Guest'}</td>
-        <td class="p-3 font-mono">${order.phone_number || 'N/A'}</td>
-        <td class="p-3 max-w-[200px] truncate" title="${itemsSummary}">${itemsSummary}</td>
+        <td class="p-3">
+          <div class="flex items-center gap-2">
+            ${avatarHtml}
+            <div class="truncate max-w-[140px]">
+              <div class="font-bold text-on-background text-xs truncate" title="${customerName}">${customerName}</div>
+              <div class="text-[10px] text-on-surface-variant truncate" title="${order.user_email || ''}">${order.user_email || 'Guest'}</div>
+            </div>
+          </div>
+        </td>
+        <td class="p-3 font-mono text-xs">${order.phone_number || 'N/A'}</td>
+        <td class="p-3 max-w-[180px] truncate" title="${itemsSummary}">${itemsSummary}</td>
         <td class="p-3 font-bold text-secondary">₹${order.total_amount || 0}</td>
         <td class="p-3">
           <span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full border uppercase ${statusClass}">
             ${displayStatus}
           </span>
         </td>
-        <td class="p-3">
-          <select class="admin-status-select bg-surface border border-outline-variant rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:border-primary" data-order-id="${order.order_id}">
-            <option value="pending" ${status === 'pending' ? 'selected' : ''}>Pending</option>
-            <option value="confirmed" ${status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
-            <option value="processing" ${status === 'processing' ? 'selected' : ''}>Processing</option>
-            <option value="out_for_delivery" ${status === 'out_for_delivery' ? 'selected' : ''}>Out for Delivery</option>
-            <option value="completed" ${status === 'completed' || status === 'delivered' || status === 'successful' ? 'selected' : ''}>Successful / Delivered</option>
-            <option value="cancelled" ${status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
-          </select>
+        <td class="p-3" onclick="event.stopPropagation();">
+          <button class="view-order-details-btn bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer" data-order-id="${order.order_id}">
+            <span class="material-symbols-outlined text-sm">visibility</span>
+            <span>View Profile & Order</span>
+          </button>
         </td>
       </tr>
     `;
   }).join('');
 
-  document.querySelectorAll('.admin-status-select').forEach(select => {
-    select.addEventListener('change', async (e) => {
-      const orderId = e.target.dataset.orderId;
-      const newStatus = e.target.value;
-      await updateOrderStatus(orderId, newStatus);
+  document.querySelectorAll('.admin-order-row, .view-order-details-btn').forEach(elem => {
+    elem.addEventListener('click', () => {
+      const orderId = elem.dataset.orderId || elem.closest('[data-order-id]')?.dataset.orderId;
+      if (orderId) {
+        openAdminOrderDetailModal(orderId);
+      }
     });
   });
+}
+
+function openAdminOrderDetailModal(orderId) {
+  const order = state.allOrders.find(o => o.order_id === orderId);
+  if (!order) return;
+
+  const modal = document.getElementById('adminOrderDetailModal');
+  if (!modal) return;
+
+  const mOrderId = document.getElementById('adminModalOrderId');
+  const mCustName = document.getElementById('adminCustomerName');
+  const mCustEmail = document.getElementById('adminCustomerEmail');
+  const mCustPhone = document.getElementById('adminCustomerPhone');
+  const mAvatarImg = document.getElementById('adminCustomerAvatarImg');
+  const mAvatarIcon = document.getElementById('adminCustomerAvatarIcon');
+  const mItemsBody = document.getElementById('adminOrderItemsTableBody');
+  const mTotal = document.getElementById('adminOrderTotalAmount');
+  const mAddress = document.getElementById('adminOrderAddress');
+  const mStatusSelect = document.getElementById('adminModalStatusSelect');
+  const mOrderDate = document.getElementById('adminOrderDate');
+  const closeBtn = document.getElementById('closeAdminOrderDetailBtn');
+
+  if (closeBtn) {
+    closeBtn.onclick = () => modal.classList.add('hidden');
+  }
+
+  if (mOrderId) mOrderId.textContent = `Order #${order.order_id}`;
+  if (mCustName) mCustName.textContent = order.full_name || order.user_email?.split('@')[0] || 'Customer';
+  if (mCustEmail) mCustEmail.textContent = order.user_email || 'Guest User';
+  if (mCustPhone) mCustPhone.textContent = order.phone_number || 'Not provided';
+
+  if (order.avatar_url && mAvatarImg && mAvatarIcon) {
+    mAvatarImg.src = order.avatar_url;
+    mAvatarImg.classList.remove('hidden');
+    mAvatarIcon.classList.add('hidden');
+  } else if (mAvatarImg && mAvatarIcon) {
+    mAvatarImg.classList.add('hidden');
+    mAvatarIcon.classList.remove('hidden');
+  }
+
+  if (mAddress) mAddress.innerHTML = formatDeliveryAddressHtml(order.delivery_address);
+  if (mTotal) mTotal.textContent = `₹${order.total_amount || 0}`;
+
+  if (mOrderDate) {
+    const d = order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A';
+    mOrderDate.textContent = `Ordered on: ${d}`;
+  }
+
+  if (mStatusSelect) {
+    const status = (order.status || 'pending').toLowerCase();
+    mStatusSelect.value = status === 'delivered' || status === 'successful' ? 'completed' : status;
+    mStatusSelect.onchange = async () => {
+      const newStat = mStatusSelect.value;
+      await updateOrderStatus(order.order_id, newStat);
+    };
+  }
+
+  // Render items list table
+  if (mItemsBody) {
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      mItemsBody.innerHTML = order.items.map(item => {
+        const itemQty = item.qty || 1;
+        const itemPrice = item.price || 0;
+        const itemTotal = itemQty * itemPrice;
+        return `
+          <tr class="hover:bg-surface-container/40">
+            <td class="p-2.5 font-semibold text-primary">${item.name}</td>
+            <td class="p-2.5 text-center text-on-surface-variant font-mono">₹${itemPrice}</td>
+            <td class="p-2.5 text-center font-bold text-secondary">${itemQty}</td>
+            <td class="p-2.5 text-right font-bold text-primary font-mono">₹${itemTotal}</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      mItemsBody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-on-surface-variant">No items found in this order.</td></tr>';
+    }
+  }
+
+  modal.classList.remove('hidden');
 }
 
 async function updateOrderStatus(orderId, newStatus) {
@@ -1562,6 +2040,7 @@ function triggerOrderFlow(preselectedItemId = null) {
   }
 
   updateCheckoutTotal();
+  setupPaymentMethodToggle();
   elements.orderModal.classList.remove('hidden');
 }
 
@@ -1609,23 +2088,24 @@ function buildOrderPDF(orderPayload) {
   doc.text(`Order Date: ${new Date(orderPayload.created_at).toLocaleString()}`, 14, 48);
   doc.text(`Customer Email: ${orderPayload.user_email}`, 14, 54);
   doc.text(`Phone Number: ${orderPayload.phone_number}`, 14, 60);
-  doc.text(`Delivery Address: ${orderPayload.delivery_address}`, 14, 66);
+  doc.text(`Payment Method: ${orderPayload.payment_method || 'Online Payment'}`, 14, 66);
+  doc.text(`Delivery / Pickup: ${orderPayload.delivery_address}`, 14, 72);
 
   // Items Table Header
   doc.setLineWidth(0.3);
-  doc.line(14, 74, 196, 74);
+  doc.line(14, 80, 196, 80);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Item Description', 14, 80);
-  doc.text('Qty', 110, 80);
-  doc.text('Price/Unit', 140, 80);
-  doc.text('Total', 175, 80);
+  doc.text('Item Description', 14, 86);
+  doc.text('Qty', 110, 86);
+  doc.text('Price/Unit', 140, 86);
+  doc.text('Total', 175, 86);
 
-  doc.line(14, 83, 196, 83);
+  doc.line(14, 89, 196, 89);
 
   // Items Rows
-  let yPos = 91;
+  let yPos = 97;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
 
@@ -1765,11 +2245,28 @@ function verifyCheckoutOtp() {
 // Handle Order Checkout Submission: DB Table + JSON file upload + PDF invoice upload to Supabase Storage Bucket 'orders'
 async function handleCheckoutSubmit(e) {
   e.preventDefault();
-  const address = document.getElementById('deliveryAddress').value;
-  const phone = document.getElementById('phoneNumber').value;
+  const address = document.getElementById('deliveryAddress')?.value || '';
+  const phone = document.getElementById('phoneNumber')?.value || '';
   const submitBtn = document.getElementById('placeOrderSubmitBtn');
 
   hideOrderAlert();
+
+  const checkedPaymentRadio = document.querySelector('input[name="paymentMethod"]:checked');
+  const selectedPaymentMethod = checkedPaymentRadio ? checkedPaymentRadio.value : 'online';
+
+  let paymentMethodLabel = 'Online Payment';
+  if (selectedPaymentMethod === 'cod') paymentMethodLabel = 'Cash on Delivery';
+  else if (selectedPaymentMethod === 'pickup') paymentMethodLabel = 'Pick Up from Shop';
+
+  // Validate Delivery Address for delivery orders
+  if (selectedPaymentMethod !== 'pickup') {
+    if (!address || !address.trim()) {
+      showOrderAlert('Delivery Address is required for home delivery! Or select "Pick Up from Shop" if picking up in person.');
+      const addressInput = document.getElementById('deliveryAddress');
+      if (addressInput) addressInput.focus();
+      return;
+    }
+  }
 
   // Validate Phone Number
   if (!phone || !phone.trim()) {
@@ -1827,6 +2324,15 @@ async function handleCheckoutSubmit(e) {
 
   const generatedId = `BS-${Math.floor(1000 + Math.random() * 9000)}`;
 
+  let finalDeliveryAddress = '';
+  if (selectedPaymentMethod === 'pickup') {
+    finalDeliveryAddress = 'Pick Up from Shop (Store Location: Arambagh Hospital More, Near HDFC Bank)';
+  } else {
+    finalDeliveryAddress = currentGpsCoords?.mapUrl && !address.includes('google.com/maps')
+      ? `${address}\n📍 Google Maps Location Pin: ${currentGpsCoords.mapUrl}`
+      : address;
+  }
+
   const orderPayload = {
     order_id: generatedId,
     user_id: state.currentUser?.id || null,
@@ -1837,7 +2343,8 @@ async function handleCheckoutSubmit(e) {
       { name: 'Mishti Doi', qty: state.orderQuantities.mishtidoi, price: 150 }
     ].filter(i => i.qty > 0),
     total_amount: total,
-    delivery_address: address,
+    payment_method: paymentMethodLabel,
+    delivery_address: finalDeliveryAddress,
     phone_number: phone,
     status: 'pending',
     created_at: new Date().toISOString()
@@ -1854,8 +2361,8 @@ async function handleCheckoutSubmit(e) {
         order_id: dbData[0].id,
         user_id: state.currentUser?.id || null,
         amount: total,
-        payment_method: 'COD',
-        payment_status: 'pending'
+        payment_method: paymentMethodLabel,
+        payment_status: selectedPaymentMethod === 'online' ? 'completed' : 'pending'
       }]);
     } catch (payErr) {
       console.error('Payment collection insert error:', payErr);
@@ -1911,11 +2418,316 @@ async function handleCheckoutSubmit(e) {
   elements.successOrderId.textContent = `#${generatedId}`;
   elements.successOrderTotal.textContent = `₹${total}`;
 
+  const successPaymentEl = document.getElementById('successPaymentMethod');
+  if (successPaymentEl) successPaymentEl.textContent = paymentMethodLabel;
+
+  const successFulfillmentEl = document.getElementById('successFulfillmentText');
+  if (successFulfillmentEl) {
+    successFulfillmentEl.textContent = selectedPaymentMethod === 'pickup' ? 'Store Pick-Up (Ready in 20 Mins)' : 'Home Delivery (30 - 45 Mins)';
+  }
+
   elements.orderModal.classList.add('hidden');
   elements.orderSuccessModal.classList.remove('hidden');
 }
 
+// Helper to format Delivery Address with clickable Google Maps button for Admins & Delivery Partners
+function formatDeliveryAddressHtml(address) {
+  if (!address) return 'No delivery address provided.';
+
+  const mapsUrlRegex = /(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|maps\.google\.com)[^\s]+)/gi;
+  
+  let formatted = address.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  if (mapsUrlRegex.test(address)) {
+    formatted = formatted.replace(mapsUrlRegex, (url) => {
+      return `
+        <div class="mt-2">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 bg-primary text-on-primary px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shadow-sm">
+            <span class="material-symbols-outlined text-sm">map</span>
+            <span>Open Live Location in Google Maps 🗺️</span>
+            <span class="material-symbols-outlined text-xs">open_in_new</span>
+          </a>
+        </div>
+      `;
+    });
+  }
+
+  return formatted.replace(/\n/g, '<br/>');
+}
+
+let currentGpsCoords = null;
+
+// Helper to format clean street address (only address text, no extra URLs)
+function formatCleanAddress(geoData) {
+  if (!geoData || !geoData.address) return geoData?.display_name || '';
+
+  const a = geoData.address;
+  const parts = [];
+
+  // House / Building / Amenity
+  if (a.building || a.house_number || a.amenity || a.shop) {
+    parts.push(a.building || a.house_number || a.amenity || a.shop);
+  }
+
+  // Street / Road
+  if (a.road || a.pedestrian || a.street || a.path) {
+    parts.push(a.road || a.pedestrian || a.street || a.path);
+  }
+
+  // Suburb / Neighbourhood / Village / Ward
+  if (a.suburb || a.neighbourhood || a.village || a.residential || a.quarter) {
+    parts.push(a.suburb || a.neighbourhood || a.village || a.residential || a.quarter);
+  }
+
+  // City / Town / County
+  if (a.town || a.city || a.municipality || a.county) {
+    parts.push(a.town || a.city || a.municipality || a.county);
+  }
+
+  // State & Postcode
+  if (a.state_district || a.state) {
+    parts.push(a.state_district || a.state);
+  }
+  if (a.postcode) {
+    parts.push(a.postcode);
+  }
+
+  return parts.length > 0 ? parts.join(', ') : geoData.display_name;
+}
+
+// Detect & Track User's Live Geolocation for Delivery
+async function handleDetectGpsLocation() {
+  const gpsBtn = document.getElementById('useGpsLocationBtn');
+  const addressInput = document.getElementById('deliveryAddress');
+  const statusBadge = document.getElementById('gpsStatusBadge');
+  const statusText = document.getElementById('gpsStatusText');
+
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser.');
+    return;
+  }
+
+  if (gpsBtn) {
+    gpsBtn.disabled = true;
+    gpsBtn.innerHTML = `
+      <span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+      <span>Fetching Address...</span>
+    `;
+  }
+
+  if (statusBadge && statusText) {
+    statusBadge.classList.remove('hidden');
+    statusText.textContent = 'Acquiring GPS coordinates...';
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = Math.round(position.coords.accuracy || 0);
+
+      const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      currentGpsCoords = { lat, lng, mapUrl: googleMapsUrl };
+
+      let fetchedCleanAddress = '';
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+          headers: { 'Accept-Language': 'en' }
+        });
+        if (res.ok) {
+          const geoData = await res.json();
+          fetchedCleanAddress = formatCleanAddress(geoData);
+        }
+      } catch (err) {
+        console.warn('Reverse geocoding failed:', err);
+      }
+
+      if (!fetchedCleanAddress) {
+        fetchedCleanAddress = `Arambagh, Hooghly, West Bengal`;
+      }
+
+      // Fill ONLY the clean street address in the address section (nothing else)
+      if (addressInput) {
+        addressInput.value = fetchedCleanAddress;
+        addressInput.focus();
+      }
+
+      if (statusBadge && statusText) {
+        statusText.textContent = `GPS Locked (Accuracy: ±${accuracy}m)`;
+      }
+
+      if (gpsBtn) {
+        gpsBtn.disabled = false;
+        gpsBtn.innerHTML = `
+          <span class="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+          <span class="text-emerald-700">Address Filled!</span>
+        `;
+        setTimeout(() => {
+          gpsBtn.innerHTML = `
+            <span class="material-symbols-outlined text-sm text-primary">my_location</span>
+            <span>Use Current Location</span>
+          `;
+        }, 3500);
+      }
+    },
+    (error) => {
+      if (gpsBtn) {
+        gpsBtn.disabled = false;
+        gpsBtn.innerHTML = `
+          <span class="material-symbols-outlined text-sm text-primary">my_location</span>
+          <span>Use Current Location</span>
+        `;
+      }
+
+      let errorMsg = 'Failed to acquire location.';
+      if (error.code === error.PERMISSION_DENIED) {
+        errorMsg = 'Location permission denied. Please allow location access in your browser/device settings.';
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        errorMsg = 'Location information is unavailable.';
+      } else if (error.code === error.TIMEOUT) {
+        errorMsg = 'Location request timed out. Please try again.';
+      }
+
+      if (statusBadge && statusText) {
+        statusText.textContent = errorMsg;
+      }
+      alert(errorMsg);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    }
+  );
+}
+
+// Function to handle clicking (View Map) button -> opens Google Maps app with live current location
+function handleOpenGpsMap() {
+  if (currentGpsCoords && currentGpsCoords.mapUrl) {
+    window.open(currentGpsCoords.mapUrl, '_blank');
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    window.open('https://www.google.com/maps', '_blank');
+    return;
+  }
+
+  const mapBtn = document.getElementById('gpsMapLink');
+  if (mapBtn) {
+    mapBtn.innerHTML = `<span>Locating...</span><span class="material-symbols-outlined text-xs animate-spin">progress_activity</span>`;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      currentGpsCoords = { lat, lng, mapUrl };
+
+      if (mapBtn) {
+        mapBtn.innerHTML = `<span>View Map</span><span class="material-symbols-outlined text-xs">open_in_new</span>`;
+      }
+      window.open(mapUrl, '_blank');
+    },
+    (err) => {
+      if (mapBtn) {
+        mapBtn.innerHTML = `<span>View Map</span><span class="material-symbols-outlined text-xs">open_in_new</span>`;
+      }
+      window.open('https://www.google.com/maps/search/?api=1&query=Arambagh', '_blank');
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
+function setupPaymentMethodToggle() {
+  const container = document.getElementById('paymentMethodContainer');
+  if (!container) return;
+
+  const cards = container.querySelectorAll('.payment-card');
+  const deliverySection = document.getElementById('deliveryAddressSection');
+  const deliveryInput = document.getElementById('deliveryAddress');
+  const pickupBanner = document.getElementById('shopPickupInfoBanner');
+
+  const updateUI = () => {
+    const checkedRadio = container.querySelector('input[name="paymentMethod"]:checked');
+    const selectedVal = checkedRadio ? checkedRadio.value : 'online';
+
+    cards.forEach(card => {
+      const radio = card.querySelector('input[type="radio"]');
+      const label = card.querySelector('.payment-card-label');
+      if (radio && radio.value === selectedVal) {
+        card.classList.add('active', 'border-2', 'border-primary', 'bg-primary/10');
+        card.classList.remove('border', 'border-outline-variant/60', 'bg-surface-container-low');
+        if (label) {
+          label.classList.add('text-primary');
+          label.classList.remove('text-on-surface');
+        }
+      } else {
+        card.classList.remove('active', 'border-2', 'border-primary', 'bg-primary/10');
+        card.classList.add('border', 'border-outline-variant/60', 'bg-surface-container-low');
+        if (label) {
+          label.classList.remove('text-primary');
+          label.classList.add('text-on-surface');
+        }
+      }
+    });
+
+    if (selectedVal === 'pickup') {
+      if (deliverySection) deliverySection.classList.add('hidden');
+      if (deliveryInput) deliveryInput.removeAttribute('required');
+      if (pickupBanner) pickupBanner.classList.remove('hidden');
+    } else {
+      if (deliverySection) deliverySection.classList.remove('hidden');
+      if (deliveryInput) deliveryInput.setAttribute('required', 'required');
+      if (pickupBanner) pickupBanner.classList.add('hidden');
+    }
+  };
+
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      const radio = card.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.checked = true;
+        updateUI();
+      }
+    });
+  });
+
+  updateUI();
+}
+
 function setupAuthAndOrderEvents() {
+  setupPaymentMethodToggle();
+
+  const stayBtn = document.getElementById('stayLoggedInBtn');
+  if (stayBtn) {
+    stayBtn.addEventListener('click', () => {
+      resetInactivityTimer(true);
+    });
+  }
+
+  const sessionLogoutBtn = document.getElementById('sessionLogoutNowBtn');
+  if (sessionLogoutBtn) {
+    sessionLogoutBtn.addEventListener('click', () => {
+      performInactivityLogout('user_choice', true);
+    });
+  }
+
+  const useGpsBtn = document.getElementById('useGpsLocationBtn');
+  if (useGpsBtn) {
+    useGpsBtn.addEventListener('click', handleDetectGpsLocation);
+  }
+
+  const gpsMapBtn = document.getElementById('gpsMapLink');
+  if (gpsMapBtn) {
+    gpsMapBtn.addEventListener('click', handleOpenGpsMap);
+  }
+
   elements.openAuthModalBtn.addEventListener('click', () => openAuthModal());
   elements.closeAuthModalBtn.addEventListener('click', () => elements.authModal.classList.add('hidden'));
 
@@ -2232,6 +3044,41 @@ function setupAuthAndOrderEvents() {
     });
   }
   // User Profile Picture File Upload Listener
+  // Profile Avatar Interactive Viewer & Upload Listeners
+  const avatarContainer = document.getElementById('profileAvatarContainer');
+  const avatarViewerModal = document.getElementById('avatarViewerModal');
+  const closeAvatarViewerBtn = document.getElementById('closeAvatarViewerBtn');
+  const viewerRemoveBtn = document.getElementById('viewerRemoveAvatarBtn');
+
+  if (avatarContainer) {
+    avatarContainer.addEventListener('click', (e) => {
+      if (e.target.closest('label[for="profileAvatarFileInput"]')) return;
+
+      const avatarUrl = state.currentUser?.user_metadata?.avatar_url;
+      if (avatarUrl && avatarViewerModal) {
+        updateUserUI(state.currentUser);
+        avatarViewerModal.classList.remove('hidden');
+      } else {
+        const fileInput = document.getElementById('profileAvatarFileInput');
+        if (fileInput) fileInput.click();
+      }
+    });
+  }
+
+  if (closeAvatarViewerBtn && avatarViewerModal) {
+    closeAvatarViewerBtn.addEventListener('click', () => {
+      avatarViewerModal.classList.add('hidden');
+    });
+  }
+
+  if (viewerRemoveBtn) {
+    viewerRemoveBtn.addEventListener('click', () => {
+      const removeBtn = document.getElementById('removeProfileAvatarBtn');
+      if (removeBtn) removeBtn.click();
+    });
+  }
+
+  // User Profile Picture File Upload Listener
   const avatarFileInput = document.getElementById('profileAvatarFileInput');
   if (avatarFileInput) {
     avatarFileInput.addEventListener('change', async (e) => {
@@ -2245,9 +3092,11 @@ function setupAuthAndOrderEvents() {
 
       try {
         const pAvatarImg = document.getElementById('profileAvatarImg');
+        const vAvatarImg = document.getElementById('viewerAvatarImg');
         if (pAvatarImg) pAvatarImg.style.opacity = '0.5';
+        if (vAvatarImg) vAvatarImg.style.opacity = '0.5';
 
-        const publicUrl = await uploadAvatarImage(file, state.currentUser.id);
+        const publicUrl = await uploadAvatarImage(file, state.currentUser.id, state.currentUser.email);
         
         if (state.currentUser.user_metadata) {
           state.currentUser.user_metadata.avatar_url = publicUrl;
@@ -2257,6 +3106,7 @@ function setupAuthAndOrderEvents() {
 
         updateUserUI(state.currentUser);
         if (pAvatarImg) pAvatarImg.style.opacity = '1';
+        if (vAvatarImg) vAvatarImg.style.opacity = '1';
         alert('Profile picture updated successfully!');
       } catch (uploadErr) {
         alert(`Failed to update profile picture: ${uploadErr.message}`);
@@ -2272,11 +3122,12 @@ function setupAuthAndOrderEvents() {
       if (!confirm('Are you sure you want to remove your profile picture?')) return;
 
       try {
-        await removeAvatarImage();
+        await removeAvatarImage(state.currentUser.id, state.currentUser.email);
         if (state.currentUser.user_metadata) {
           state.currentUser.user_metadata.avatar_url = null;
         }
         updateUserUI(state.currentUser);
+        if (avatarViewerModal) avatarViewerModal.classList.add('hidden');
         alert('Profile picture removed successfully!');
       } catch (err) {
         alert(`Failed to remove profile picture: ${err.message}`);
@@ -2398,6 +3249,7 @@ function setupEventListeners() {
   window.addEventListener('scroll', updateScrollSync, { passive: true });
   setupSmoothNavigation();
   setupAuthAndOrderEvents();
+  initMultiTabSync();
   setupBackgroundFreezeObserver();
   checkAuthSession();
 }
@@ -2435,4 +3287,8 @@ async function init() {
   }, 400);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
