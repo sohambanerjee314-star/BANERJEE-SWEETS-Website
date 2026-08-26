@@ -2135,10 +2135,10 @@ function buildOrderPDF(orderPayload) {
 }
 
 // Mobile Phone OTP Verification Helper Functions for Checkout
-function sendCheckoutOtp() {
-  const phone = document.getElementById('phoneNumber')?.value;
-  const phoneErr = document.getElementById('phoneError');
-  const phoneInput = document.getElementById('phoneNumber');
+async function sendCheckoutOtp() {
+  const email = document.getElementById('emailAddress')?.value;
+  const emailErr = document.getElementById('emailError');
+  const emailInput = document.getElementById('emailAddress');
   const otpContainer = document.getElementById('otpContainer');
   const otpNoticeText = document.getElementById('otpNoticeText');
   const otpErrorText = document.getElementById('otpErrorText');
@@ -2147,58 +2147,100 @@ function sendCheckoutOtp() {
   const sendOtpBtn = document.getElementById('sendOtpBtn');
   const triggerOtpBtn = document.getElementById('triggerOtpBtn');
 
-  if (phoneErr) phoneErr.classList.add('hidden');
+  if (emailErr) emailErr.classList.add('hidden');
   if (otpErrorText) otpErrorText.classList.add('hidden');
 
-  if (!phone || !phone.trim()) {
-    if (phoneErr) {
-      phoneErr.textContent = 'Please enter a mobile phone number to receive OTP.';
-      phoneErr.classList.remove('hidden');
+  if (!email || !email.trim()) {
+    if (emailErr) {
+      emailErr.textContent = 'Please enter an email address to receive OTP.';
+      emailErr.classList.remove('hidden');
     }
-    if (phoneInput) phoneInput.focus();
+    if (emailInput) emailInput.focus();
     return false;
   }
 
-  if (!isValidPhoneNumber(phone)) {
-    if (phoneErr) {
-      phoneErr.textContent = 'Please enter a valid 10-digit mobile number (e.g. +91 7001832118).';
-      phoneErr.classList.remove('hidden');
+  // Simple email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    if (emailErr) {
+      emailErr.textContent = 'Please enter a valid email address.';
+      emailErr.classList.remove('hidden');
     }
-    if (phoneInput) phoneInput.focus();
+    if (emailInput) emailInput.focus();
     return false;
   }
 
-  // Generate 6-digit OTP Code
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  state.generatedOtp = otpCode;
-  state.isPhoneVerified = false;
-
-  if (otpNoticeText) {
-    otpNoticeText.innerHTML = `<strong>📲 SMS OTP Sent to ${phone}!</strong> [Verification Code: <span class="font-mono font-bold text-emerald-950 underline">${otpCode}</span>]`;
+  if (sendOtpBtn) {
+    sendOtpBtn.disabled = true;
+    sendOtpBtn.textContent = 'Sending...';
+  }
+  if (triggerOtpBtn) {
+    triggerOtpBtn.disabled = true;
+    triggerOtpBtn.textContent = 'Sending...';
   }
 
-  if (otpContainer) otpContainer.classList.remove('hidden');
-  if (otpSuccessBadge) otpSuccessBadge.classList.add('hidden');
+  try {
+    const response = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email })
+    });
 
-  // Start 30s Countdown Timer
-  let timeLeft = 30;
-  if (state.otpCountdownTimer) clearInterval(state.otpCountdownTimer);
+    const data = await response.json();
 
-  if (sendOtpBtn) sendOtpBtn.disabled = true;
-  if (triggerOtpBtn) triggerOtpBtn.disabled = true;
-
-  state.otpCountdownTimer = setInterval(() => {
-    timeLeft--;
-    if (otpTimerText) otpTimerText.textContent = `Resend in ${timeLeft}s`;
-    if (timeLeft <= 0) {
-      clearInterval(state.otpCountdownTimer);
-      if (otpTimerText) otpTimerText.textContent = 'Resend OTP';
-      if (sendOtpBtn) sendOtpBtn.disabled = false;
-      if (triggerOtpBtn) triggerOtpBtn.disabled = false;
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to send OTP.');
     }
-  }, 1000);
 
-  return true;
+    // Use the generated OTP from the backend to verify later
+    state.generatedOtp = data.otpCode;
+    state.isEmailVerified = false; // changed from isPhoneVerified
+
+    if (otpNoticeText) {
+      otpNoticeText.innerHTML = `<strong>📧 Email OTP Sent to ${email}!</strong>`;
+    }
+
+    if (otpContainer) otpContainer.classList.remove('hidden');
+    if (otpSuccessBadge) otpSuccessBadge.classList.add('hidden');
+
+    // Start 30s Countdown Timer
+    let timeLeft = 30;
+    if (state.otpCountdownTimer) clearInterval(state.otpCountdownTimer);
+
+    if (sendOtpBtn) sendOtpBtn.textContent = 'Verify OTP';
+    if (triggerOtpBtn) triggerOtpBtn.textContent = 'Resend OTP';
+
+    state.otpCountdownTimer = setInterval(() => {
+      timeLeft--;
+      if (otpTimerText) otpTimerText.textContent = `Resend in ${timeLeft}s`;
+      if (timeLeft <= 0) {
+        clearInterval(state.otpCountdownTimer);
+        if (otpTimerText) otpTimerText.textContent = 'Resend OTP';
+        if (sendOtpBtn) sendOtpBtn.disabled = false;
+        if (triggerOtpBtn) triggerOtpBtn.disabled = false;
+      }
+    }, 1000);
+
+    return true;
+
+  } catch (error) {
+    console.error("Error sending OTP via SMS API:", error);
+    if (otpErrorText) {
+      otpErrorText.textContent = `Error: ${error.message}`;
+      otpErrorText.classList.remove('hidden');
+    }
+    if (sendOtpBtn) {
+      sendOtpBtn.disabled = false;
+      sendOtpBtn.textContent = 'Verify OTP';
+    }
+    if (triggerOtpBtn) {
+      triggerOtpBtn.disabled = false;
+      triggerOtpBtn.textContent = 'Send OTP';
+    }
+    return false;
+  }
 }
 
 function verifyCheckoutOtp() {
@@ -2217,7 +2259,7 @@ function verifyCheckoutOtp() {
 
   if (!enteredOtp || enteredOtp.length !== 6) {
     if (otpErrorText) {
-      otpErrorText.textContent = 'Please enter the 6-digit OTP code sent to your phone.';
+      otpErrorText.textContent = 'Please enter the 6-digit OTP code sent to your email.';
       otpErrorText.classList.remove('hidden');
     }
     return false;
@@ -2228,12 +2270,12 @@ function verifyCheckoutOtp() {
       otpErrorText.textContent = 'Invalid OTP Code. Please enter the correct 6-digit code or click Resend OTP.';
       otpErrorText.classList.remove('hidden');
     }
-    state.isPhoneVerified = false;
+    state.isEmailVerified = false;
     return false;
   }
 
   // OTP Verified Successfully!
-  state.isPhoneVerified = true;
+  state.isEmailVerified = true;
   if (otpErrorText) otpErrorText.classList.add('hidden');
   if (otpSuccessBadge) {
     otpSuccessBadge.classList.remove('hidden');
@@ -2246,7 +2288,7 @@ function verifyCheckoutOtp() {
 async function handleCheckoutSubmit(e) {
   e.preventDefault();
   const address = document.getElementById('deliveryAddress')?.value || '';
-  const phone = document.getElementById('phoneNumber')?.value || '';
+  const email = document.getElementById('emailAddress')?.value || '';
   const submitBtn = document.getElementById('placeOrderSubmitBtn');
 
   hideOrderAlert();
@@ -2268,46 +2310,49 @@ async function handleCheckoutSubmit(e) {
     }
   }
 
-  // Validate Phone Number
-  if (!phone || !phone.trim()) {
-    showOrderAlert('Phone number is required!');
-    if (elements.phoneError) {
-      elements.phoneError.textContent = 'Please enter your phone number.';
-      elements.phoneError.classList.remove('hidden');
+  // Validate Email
+  if (!email || !email.trim()) {
+    showOrderAlert('Email address is required!');
+    if (elements.emailError) {
+      elements.emailError.textContent = 'Please enter your email address.';
+      elements.emailError.classList.remove('hidden');
     }
-    if (elements.phoneNumberInput) {
-      elements.phoneNumberInput.classList.remove('border-outline-variant');
-      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
-      elements.phoneNumberInput.focus();
-    }
-    return;
-  }
-
-  if (!isValidPhoneNumber(phone)) {
-    showOrderAlert('Invalid phone number! Please enter a valid 10-digit mobile number.');
-    if (elements.phoneError) {
-      elements.phoneError.textContent = 'Please enter a valid phone number (e.g. +91 7001832118 or 10-digit mobile number).';
-      elements.phoneError.classList.remove('hidden');
-    }
-    if (elements.phoneNumberInput) {
-      elements.phoneNumberInput.classList.remove('border-outline-variant');
-      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
-      elements.phoneNumberInput.focus();
+    const emailInput = document.getElementById('emailAddress');
+    if (emailInput) {
+      emailInput.classList.remove('border-outline-variant');
+      emailInput.classList.add('border-error', 'border-red-500');
+      emailInput.focus();
     }
     return;
   }
 
-  // Mandatory Mobile Phone OTP Verification Check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    showOrderAlert('Invalid email address! Please enter a valid email.');
+    if (elements.emailError) {
+      elements.emailError.textContent = 'Please enter a valid email address.';
+      elements.emailError.classList.remove('hidden');
+    }
+    const emailInput = document.getElementById('emailAddress');
+    if (emailInput) {
+      emailInput.classList.remove('border-outline-variant');
+      emailInput.classList.add('border-error', 'border-red-500');
+      emailInput.focus();
+    }
+    return;
+  }
+
+  // Mandatory Email OTP Verification Check
   if (!state.generatedOtp) {
     sendCheckoutOtp();
-    showOrderAlert('📲 Verification OTP sent to your phone! Please enter the 6-digit OTP code below to confirm your order.');
+    showOrderAlert('📧 Verification OTP sent to your email! Please enter the 6-digit OTP code below to confirm your order.');
     return;
   }
 
-  if (!state.isPhoneVerified) {
+  if (!state.isEmailVerified) {
     const verified = verifyCheckoutOtp();
     if (!verified) {
-      showOrderAlert('🔒 Mobile phone verification required! Please enter valid 6-digit OTP code before placing order.');
+      showOrderAlert('🔒 Email verification required! Please enter valid 6-digit OTP code before placing order.');
       return;
     }
   }
@@ -2345,7 +2390,8 @@ async function handleCheckoutSubmit(e) {
     total_amount: total,
     payment_method: paymentMethodLabel,
     delivery_address: finalDeliveryAddress,
-    phone_number: phone,
+    contact_email: email, // Store email here (schema may need update if strictly using phone_number)
+    phone_number: email, // Temporary backward compatibility if DB strictly requires phone_number
     status: 'pending',
     created_at: new Date().toISOString()
   };
