@@ -2288,7 +2288,7 @@ function verifyCheckoutOtp() {
 async function handleCheckoutSubmit(e) {
   e.preventDefault();
   const address = document.getElementById('deliveryAddress')?.value || '';
-  const email = document.getElementById('emailAddress')?.value || '';
+  const phone = document.getElementById('phoneNumber')?.value || '';
   const submitBtn = document.getElementById('placeOrderSubmitBtn');
 
   hideOrderAlert();
@@ -2310,51 +2310,35 @@ async function handleCheckoutSubmit(e) {
     }
   }
 
-  // Validate Email
-  if (!email || !email.trim()) {
-    showOrderAlert('Email address is required!');
-    if (elements.emailError) {
-      elements.emailError.textContent = 'Please enter your email address.';
-      elements.emailError.classList.remove('hidden');
+  // Validate Phone Number
+  if (!phone || !phone.trim()) {
+    showOrderAlert('Phone number is required!');
+    if (elements.phoneError) {
+      elements.phoneError.textContent = 'Please enter your phone number.';
+      elements.phoneError.classList.remove('hidden');
     }
-    const emailInput = document.getElementById('emailAddress');
-    if (emailInput) {
-      emailInput.classList.remove('border-outline-variant');
-      emailInput.classList.add('border-error', 'border-red-500');
-      emailInput.focus();
-    }
-    return;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    showOrderAlert('Invalid email address! Please enter a valid email.');
-    if (elements.emailError) {
-      elements.emailError.textContent = 'Please enter a valid email address.';
-      elements.emailError.classList.remove('hidden');
-    }
-    const emailInput = document.getElementById('emailAddress');
-    if (emailInput) {
-      emailInput.classList.remove('border-outline-variant');
-      emailInput.classList.add('border-error', 'border-red-500');
-      emailInput.focus();
+    if (elements.phoneNumberInput) {
+      elements.phoneNumberInput.classList.remove('border-outline-variant');
+      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
+      elements.phoneNumberInput.focus();
     }
     return;
   }
 
-  // Mandatory Email OTP Verification Check
-  if (!state.generatedOtp) {
-    sendCheckoutOtp();
-    showOrderAlert('📧 Verification OTP sent to your email! Please enter the 6-digit OTP code below to confirm your order.');
-    return;
-  }
-
-  if (!state.isEmailVerified) {
-    const verified = verifyCheckoutOtp();
-    if (!verified) {
-      showOrderAlert('🔒 Email verification required! Please enter valid 6-digit OTP code before placing order.');
-      return;
+  // Simple validation for 10 digits
+  const phoneRegex = /^[0-9]{10}$/;
+  if (!phoneRegex.test(phone.replace(/[\s\-\+]/g, '').slice(-10))) {
+    showOrderAlert('Invalid phone number! Please enter a valid 10-digit mobile number.');
+    if (elements.phoneError) {
+      elements.phoneError.textContent = 'Please enter a valid phone number (e.g. +91 7001832118 or 10-digit mobile number).';
+      elements.phoneError.classList.remove('hidden');
     }
+    if (elements.phoneNumberInput) {
+      elements.phoneNumberInput.classList.remove('border-outline-variant');
+      elements.phoneNumberInput.classList.add('border-error', 'border-red-500');
+      elements.phoneNumberInput.focus();
+    }
+    return;
   }
 
   const total = updateCheckoutTotal();
@@ -2390,8 +2374,7 @@ async function handleCheckoutSubmit(e) {
     total_amount: total,
     payment_method: paymentMethodLabel,
     delivery_address: finalDeliveryAddress,
-    contact_email: email, // Store email here (schema may need update if strictly using phone_number)
-    phone_number: email, // Temporary backward compatibility if DB strictly requires phone_number
+    phone_number: phone,
     status: 'pending',
     created_at: new Date().toISOString()
   };
