@@ -51,7 +51,10 @@ export default async function handler(req, res) {
 
     if (data.error) {
       console.error("[Resend] API Error:", data.error);
-      return res.status(500).json({ success: false, message: 'Failed to send OTP email.' });
+      return res.status(500).json({ 
+        success: false, 
+        message: data.error.message || 'Failed to send OTP email. Make sure you are sending to the verified email address on the free tier.' 
+      });
     }
 
     console.log(`[Resend] Sent Email to ${email}. ID: ${data.data?.id}`);
